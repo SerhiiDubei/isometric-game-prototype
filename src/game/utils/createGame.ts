@@ -7,6 +7,11 @@ export function createGame(parent: HTMLDivElement) {
     parent,
     backgroundColor: "#0b0b0f",
     scene: [IsoScene],
+    render: {
+      antialias: true,
+      pixelArt: true,
+      roundPixels: true,
+    },
     scale: {
       mode: Phaser.Scale.RESIZE,
       width: "100%",
