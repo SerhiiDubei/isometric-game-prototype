@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ізометрична гра як Diablo (JS + Phaser)</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        background: #222;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+      }
+      canvas {
+        border: 2px solid #444;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      }
+      #ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        font-size: 18px;
+        text-shadow: 2px 2px 4px black;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div>HP: <span id="playerHP">100</span>/100</div>
+      <div>Враги: <span id="enemyCount">0</span></div>
+      <div>Управління: WASD або стрілки - рух | Клік мишкою - атака</div>
+    </div>
+    <script>
+      const config = {
+        type: Phaser.AUTO,
+        width: 1024,
+        height: 768,
+        physics: {
+          default: "arcade",
+          arcade: {
+            gravity: { x: 0, y: 0 },
+            debug: false,
+          },
+        },
+        scene: {
+          preload: preload,
+          create: create,
+          update: update,
+        },
+        backgroundColor: "#2d4a2d", // Темний зелений для фентезі стилю
+      };
+
+      const game = new Phaser.Game(config);
+
+      // Глобальні змінні
+      let player;
+      let enemies;
+      let cursors;
+      let pointer;
+      let playerHP = 100;
+      let attackCooldown = 0;
+      const ATTACK_RANGE = 80;
+      const ATTACK_DAMAGE = 25;
+      const ENEMY_DAMAGE = 10;
+      const ENEMY_SPEED = 60;
+      const PLAYER_SPEED = 200;
+
+      function preload() {
+        // Генеруємо спрайти програмно, бо немає assets
+        this.textures.generate("ground", {
+          data: ["1111", "1111"],
+          pixelWidth: 16,
+          pixelHeight: 16,
+        });
+        // Фейковий спрайт для ground (сірий)
+      }
+
+      function create() {
+        // Створюємо ізометричний фон за допомогою графіки
+        const graphics = this.add.graphics();
+        graphics.fillStyle(0x4a7c59, 1); // Трава
+        for (let x = 0; x < 50; x++) {
+          for (let y = 0; y < 50; y++) {
+            const isoX = (x - y) * 32 + 512;
+            const isoY = (x + y) * 16 + 384;
+            graphics.fillRect(isoX - 32, isoY - 16, 64, 32);
+          }
+        }
+        graphics.generateTexture("isoGround", 1024, 768);
+
+        this.add.image(512, 384, "isoGround");
+
+        // Додаткові деталі (доріжки)
+        const pathGraphics = this.add.graphics();
+        pathGraphics.fillStyle(0x8b7355, 0.8); // Земля
+        for (let i = 0; i < 30; i++) {
+          const isoX = Math.sin(i * 0.5) * 200 + 512;
+          const isoY = i * 20 + 200;
+          pathGraphics.fillEllipse(isoX, isoY, 80, 40);
+        }
+        pathGraphics.generateTexture("path", 1024, 768);
+        this.add.image(512, 384, "path").setAlpha(0.6);
+
+        // Персонаж гравця (графіка: синій трикутник з "шоломом")
+        player = this.add.graphics();
+        player.fillStyle(0x4169e1, 1); // Синє тіло
+        player.fillTriangle(0, -20, -15, 20, 15, 20);
+        player.fillStyle(0xadd8e6, 1); // Шолом
+        player.fillCircle(0, -18, 8);
+        player.lineStyle(2, 0x000000);
+        player.strokeTriangle(0, -20, -15, 20, 15, 20);
+        player.generateTexture("player", 32, 48);
+        player.destroy();
+
+        player = this.physics.add.sprite(512, 384, "player");
+        player.setScale(2);
+        player.setCollideWorldBounds(true);
+        player.body.setSize(20, 30);
+        player.health = 100;
+        player.setDepth(100); // Початковий depth
+
+        // Група ворогів (червоні фігурки)
+        enemies = this.physics.add.group();
+
+        // Spawn перших ворогів
+        spawnEnemies.call(this, 8);
+
+        // Клавіатура
+        cursors = this.input.keyboard.createCursorKeys();
+        const keys = this.input.keyboard.addKeys("W,S,A,D");
+
+        // Миша для атаки
+        pointer = this.input.activePointer;
+
+        // Камера слідкує за гравцем
+        this.cameras.main.startFollow(player);
+        this.cameras.main.setBounds(0, 0, 2048, 1536); // Більша світова карта
+
+        // Колізії
+        this.physics.add.collider(player, enemies, hitEnemy, null, this);
+        this.physics.add.overlap(player, enemies, damagePlayer, null, this);
+      }
+
+      function update(time, delta) {
+        // Оновлення depth для ізометрії (сортування по Y)
+        player.setDepth(player.y);
+        enemies.children.entries.forEach((enemy) => enemy.setDepth(enemy.y));
+
+        // Рух гравця (WASD або стрілки)
+        const velocity = new Phaser.Math.Vector2();
+        if (cursors.left.isDown || this.input.keyboard.addKey("A").isDown)
+          velocity.x -= 1;
+        if (cursors.right.isDown || this.input.keyboard.addKey("D").isDown)
+          velocity.x += 1;
+        if (cursors.up.isDown || this.input.keyboard.addKey("W").isDown)
+          velocity.y -= 1;
+        if (cursors.down.isDown || this.input.keyboard.addKey("S").isDown)
+          velocity.y += 1;
+
+        if (velocity.length() > 0) {
+          velocity.normalize();
+          player.setVelocity(
+            velocity.x * PLAYER_SPEED,
+            velocity.y * PLAYER_SPEED
+          );
+        } else {
+          player.setVelocity(0);
+        }
+
+        // Атака по кліку миші (куліна атака)
+        if (pointer.isDown && attackCooldown <= 0) {
+          attackEnemies.call(this);
+          attackCooldown = 300; // 0.3 сек кулдаун
+        }
+        if (attackCooldown > 0) attackCooldown -= delta;
+
+        // AI ворогів: переслідують гравця
+        enemies.children.entries.forEach((enemy) => {
+          if (enemy.active) {
+            this.physics.moveToObject(enemy, player, ENEMY_SPEED);
+            if (
+              Phaser.Math.Distance.Between(
+                enemy.x,
+                enemy.y,
+                player.x,
+                player.y
+              ) < 30
+            ) {
+              enemy.setVelocity(0);
+            }
+          }
+        });
+
+        // UI оновлення
+        document.getElementById("playerHP").textContent = Math.max(
+          0,
+          player.health
+        );
+        document.getElementById("enemyCount").textContent =
+          enemies.children.entries.filter((e) => e.active).length;
+
+        // Respawn ворогів
+        if (enemies.children.entries.filter((e) => e.active).length < 3) {
+          spawnEnemies.call(this, 3);
+        }
+
+        // Перезапуск при смерті
+        if (player.health <= 0) {
+          this.scene.restart();
+        }
+      }
+
+      function spawnEnemies(count) {
+        for (let i = 0; i < count; i++) {
+          const enemyGraphics = this.add.graphics();
+          enemyGraphics.fillStyle(0xff0000, 1); // Червоне тіло
+          enemyGraphics.fillTriangle(0, -15, -12, 15, 12, 15);
+          enemyGraphics.fillStyle(0x8b0000, 1); // Очі
+          enemyGraphics.fillCircle(-4, -5, 3);
+          enemyGraphics.fillCircle(4, -5, 3);
+          enemyGraphics.lineStyle(2, 0x000000);
+          enemyGraphics.strokeTriangle(0, -15, -12, 15, 12, 15);
+          enemyGraphics.generateTexture("enemy", 28, 36);
+          enemyGraphics.destroy();
+
+          const enemy = enemies.create(
+            Phaser.Math.Between(100, 1900),
+            Phaser.Math.Between(100, 1400),
+            "enemy"
+          );
+          enemy.setScale(1.8);
+          enemy.health = 50;
+          enemy.setCollideWorldBounds(true);
+          enemy.body.setSize(18, 25);
+          enemy.setDepth(50);
+        }
+      }
+
+      function attackEnemies() {
+        // Знаходимо ворогів у радіусі атаки
+        const enemiesInRange = enemies.children.entries.filter(
+          (enemy) =>
+            enemy.active &&
+            Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y) <
+              ATTACK_RANGE
+        );
+
+        enemiesInRange.forEach((enemy) => {
+          enemy.health -= ATTACK_DAMAGE;
+          enemy.setTint(0xff0000); // Спалах
+          this.tweens.add({
+            targets: enemy,
+            alpha: 0.5,
+            duration: 100,
+            yoyo: true,
+          });
+
+          if (enemy.health <= 0) {
+            enemy.destroy();
+          }
+        });
+
+        // Візуальний ефект атаки (промінь)
+        const graphics = this.add.graphics().setDepth(101);
+        graphics.lineStyle(3, 0xffff00, 1);
+        enemiesInRange.forEach((enemy) => {
+          graphics.lineBetween(player.x, player.y, enemy.x, enemy.y);
+        });
+        this.tweens.add({
+          targets: graphics,
+          alpha: 0,
+          duration: 200,
+          onComplete: () => graphics.destroy(),
+        });
+      }
+
+      function hitEnemy(player, enemy) {
+        // Колізія для відштовхування
+        enemy.setVelocity(
+          Phaser.Math.Between(-100, 100),
+          Phaser.Math.Between(-100, 100)
+        );
+      }
+
+      function damagePlayer(player, enemy) {
+        if (player.health > 0 && enemy.active) {
+          player.health -= ENEMY_DAMAGE * (1 / 60); // Повільне пошкодження при наближенні
+          player.setTint(0xff0000);
+          this.tweens.add({
+            targets: player,
+            alpha: 0.7,
+            duration: 150,
+            yoyo: true,
+          });
+        }
+      }
+    </script>
+  </body>
+</html>
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ізометрична гра як Diablo (JS + Phaser)</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        background: #222;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+      }
+      canvas {
+        border: 2px solid #444;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      }
+      #ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        font-size: 18px;
+        text-shadow: 2px 2px 4px black;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div>HP: <span id="playerHP">100</span>/100</div>
+      <div>Враги: <span id="enemyCount">0</span></div>
+      <div>Управління: WASD або стрілки - рух | Клік мишкою - атака</div>
+    </div>
+    <script>
+      const config = {
+        type: Phaser.AUTO,
+        width: 1024,
+        height: 768,
+        physics: {
+          default: "arcade",
+          arcade: {
+            gravity: { x: 0, y: 0 },
+            debug: false,
+          },
+        },
+        scene: {
+          preload: preload,
+          create: create,
+          update: update,
+        },
+        backgroundColor: "#2d4a2d", // Темний зелений для фентезі стилю
+      };
+
+      const game = new Phaser.Game(config);
+
+      // Глобальні змінні
+      let player;
+      let enemies;
+      let cursors;
+      let pointer;
+      let playerHP = 100;
+      let attackCooldown = 0;
+      const ATTACK_RANGE = 80;
+      const ATTACK_DAMAGE = 25;
+      const ENEMY_DAMAGE = 10;
+      const ENEMY_SPEED = 60;
+      const PLAYER_SPEED = 200;
+
+      function preload() {
+        // Генеруємо спрайти програмно, бо немає assets
+        this.textures.generate("ground", {
+          data: ["1111", "1111"],
+          pixelWidth: 16,
+          pixelHeight: 16,
+        });
+        // Фейковий спрайт для ground (сірий)
+      }
+
+      function create() {
+        // Створюємо ізометричний фон за допомогою графіки
+        const graphics = this.add.graphics();
+        graphics.fillStyle(0x4a7c59, 1); // Трава
+        for (let x = 0; x < 50; x++) {
+          for (let y = 0; y < 50; y++) {
+            const isoX = (x - y) * 32 + 512;
+            const isoY = (x + y) * 16 + 384;
+            graphics.fillRect(isoX - 32, isoY - 16, 64, 32);
+          }
+        }
+        graphics.generateTexture("isoGround", 1024, 768);
+
+        this.add.image(512, 384, "isoGround");
+
+        // Додаткові деталі (доріжки)
+        const pathGraphics = this.add.graphics();
+        pathGraphics.fillStyle(0x8b7355, 0.8); // Земля
+        for (let i = 0; i < 30; i++) {
+          const isoX = Math.sin(i * 0.5) * 200 + 512;
+          const isoY = i * 20 + 200;
+          pathGraphics.fillEllipse(isoX, isoY, 80, 40);
+        }
+        pathGraphics.generateTexture("path", 1024, 768);
+        this.add.image(512, 384, "path").setAlpha(0.6);
+
+        // Персонаж гравця (графіка: синій трикутник з "шоломом")
+        player = this.add.graphics();
+        player.fillStyle(0x4169e1, 1); // Синє тіло
+        player.fillTriangle(0, -20, -15, 20, 15, 20);
+        player.fillStyle(0xadd8e6, 1); // Шолом
+        player.fillCircle(0, -18, 8);
+        player.lineStyle(2, 0x000000);
+        player.strokeTriangle(0, -20, -15, 20, 15, 20);
+        player.generateTexture("player", 32, 48);
+        player.destroy();
+
+        player = this.physics.add.sprite(512, 384, "player");
+        player.setScale(2);
+        player.setCollideWorldBounds(true);
+        player.body.setSize(20, 30);
+        player.health = 100;
+        player.setDepth(100); // Початковий depth
+
+        // Група ворогів (червоні фігурки)
+        enemies = this.physics.add.group();
+
+        // Spawn перших ворогів
+        spawnEnemies.call(this, 8);
+
+        // Клавіатура
+        cursors = this.input.keyboard.createCursorKeys();
+        const keys = this.input.keyboard.addKeys("W,S,A,D");
+
+        // Миша для атаки
+        pointer = this.input.activePointer;
+
+        // Камера слідкує за гравцем
+        this.cameras.main.startFollow(player);
+        this.cameras.main.setBounds(0, 0, 2048, 1536); // Більша світова карта
+
+        // Колізії
+        this.physics.add.collider(player, enemies, hitEnemy, null, this);
+        this.physics.add.overlap(player, enemies, damagePlayer, null, this);
+      }
+
+      function update(time, delta) {
+        // Оновлення depth для ізометрії (сортування по Y)
+        player.setDepth(player.y);
+        enemies.children.entries.forEach((enemy) => enemy.setDepth(enemy.y));
+
+        // Рух гравця (WASD або стрілки)
+        const velocity = new Phaser.Math.Vector2();
+        if (cursors.left.isDown || this.input.keyboard.addKey("A").isDown)
+          velocity.x -= 1;
+        if (cursors.right.isDown || this.input.keyboard.addKey("D").isDown)
+          velocity.x += 1;
+        if (cursors.up.isDown || this.input.keyboard.addKey("W").isDown)
+          velocity.y -= 1;
+        if (cursors.down.isDown || this.input.keyboard.addKey("S").isDown)
+          velocity.y += 1;
+
+        if (velocity.length() > 0) {
+          velocity.normalize();
+          player.setVelocity(
+            velocity.x * PLAYER_SPEED,
+            velocity.y * PLAYER_SPEED
+          );
+        } else {
+          player.setVelocity(0);
+        }
+
+        // Атака по кліку миші (куліна атака)
+        if (pointer.isDown && attackCooldown <= 0) {
+          attackEnemies.call(this);
+          attackCooldown = 300; // 0.3 сек кулдаун
+        }
+        if (attackCooldown > 0) attackCooldown -= delta;
+
+        // AI ворогів: переслідують гравця
+        enemies.children.entries.forEach((enemy) => {
+          if (enemy.active) {
+            this.physics.moveToObject(enemy, player, ENEMY_SPEED);
+            if (
+              Phaser.Math.Distance.Between(
+                enemy.x,
+                enemy.y,
+                player.x,
+                player.y
+              ) < 30
+            ) {
+              enemy.setVelocity(0);
+            }
+          }
+        });
+
+        // UI оновлення
+        document.getElementById("playerHP").textContent = Math.max(
+          0,
+          player.health
+        );
+        document.getElementById("enemyCount").textContent =
+          enemies.children.entries.filter((e) => e.active).length;
+
+        // Respawn ворогів
+        if (enemies.children.entries.filter((e) => e.active).length < 3) {
+          spawnEnemies.call(this, 3);
+        }
+
+        // Перезапуск при смерті
+        if (player.health <= 0) {
+          this.scene.restart();
+        }
+      }
+
+      function spawnEnemies(count) {
+        for (let i = 0; i < count; i++) {
+          const enemyGraphics = this.add.graphics();
+          enemyGraphics.fillStyle(0xff0000, 1); // Червоне тіло
+          enemyGraphics.fillTriangle(0, -15, -12, 15, 12, 15);
+          enemyGraphics.fillStyle(0x8b0000, 1); // Очі
+          enemyGraphics.fillCircle(-4, -5, 3);
+          enemyGraphics.fillCircle(4, -5, 3);
+          enemyGraphics.lineStyle(2, 0x000000);
+          enemyGraphics.strokeTriangle(0, -15, -12, 15, 12, 15);
+          enemyGraphics.generateTexture("enemy", 28, 36);
+          enemyGraphics.destroy();
+
+          const enemy = enemies.create(
+            Phaser.Math.Between(100, 1900),
+            Phaser.Math.Between(100, 1400),
+            "enemy"
+          );
+          enemy.setScale(1.8);
+          enemy.health = 50;
+          enemy.setCollideWorldBounds(true);
+          enemy.body.setSize(18, 25);
+          enemy.setDepth(50);
+        }
+      }
+
+      function attackEnemies() {
+        // Знаходимо ворогів у радіусі атаки
+        const enemiesInRange = enemies.children.entries.filter(
+          (enemy) =>
+            enemy.active &&
+            Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y) <
+              ATTACK_RANGE
+        );
+
+        enemiesInRange.forEach((enemy) => {
+          enemy.health -= ATTACK_DAMAGE;
+          enemy.setTint(0xff0000); // Спалах
+          this.tweens.add({
+            targets: enemy,
+            alpha: 0.5,
+            duration: 100,
+            yoyo: true,
+          });
+
+          if (enemy.health <= 0) {
+            enemy.destroy();
+          }
+        });
+
+        // Візуальний ефект атаки (промінь)
+        const graphics = this.add.graphics().setDepth(101);
+        graphics.lineStyle(3, 0xffff00, 1);
+        enemiesInRange.forEach((enemy) => {
+          graphics.lineBetween(player.x, player.y, enemy.x, enemy.y);
+        });
+        this.tweens.add({
+          targets: graphics,
+          alpha: 0,
+          duration: 200,
+          onComplete: () => graphics.destroy(),
+        });
+      }
+
+      function hitEnemy(player, enemy) {
+        // Колізія для відштовхування
+        enemy.setVelocity(
+          Phaser.Math.Between(-100, 100),
+          Phaser.Math.Between(-100, 100)
+        );
+      }
+
+      function damagePlayer(player, enemy) {
+        if (player.health > 0 && enemy.active) {
+          player.health -= ENEMY_DAMAGE * (1 / 60); // Повільне пошкодження при наближенні
+          player.setTint(0xff0000);
+          this.tweens.add({
+            targets: player,
+            alpha: 0.7,
+            duration: 150,
+            yoyo: true,
+          });
+        }
+      }
+    </script>
+  </body>
+</html>
