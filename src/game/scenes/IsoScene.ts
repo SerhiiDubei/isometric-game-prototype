@@ -14,7 +14,6 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 export class IsoScene extends Phaser.Scene {
   private ox = 0;
   private oy = 0;
-  private isAnimating = false;
 
   private blocked = new Uint8Array(COLS * ROWS); // 0 free, 1 wall
   private floorTexKey = "floor";
