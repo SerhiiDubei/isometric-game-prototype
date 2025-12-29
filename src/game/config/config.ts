@@ -1,6 +1,6 @@
 export const GAME = {
-  tileW: 64,
-  tileH: 32,
+  tileW: 82,
+  tileH: 42,
   cols: 240,
   rows: 240,
 } as const;

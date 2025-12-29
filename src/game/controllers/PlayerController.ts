@@ -6,6 +6,7 @@ import type { GridPoint } from "../types/grid-types";
 import type { IsoTransform } from "../iso/isoTransofrm";
 import { clamp } from "../config/config";
 import { astar } from "../utils/astar";
+import type { TileEditor } from "../ui/TileEditor";
 
 export class PlayerController {
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -17,6 +18,7 @@ export class PlayerController {
   };
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private path: GridPoint[] = [];
+  private tileEditor?: TileEditor; // ✅ Посилання на редактор для перевірки режиму редагування
 
   public scene: Phaser.Scene;
   public grid: Grid;
@@ -27,12 +29,14 @@ export class PlayerController {
     scene: Phaser.Scene,
     grid: Grid,
     iso: IsoTransform,
-    player: IsoCharacter
+    player: IsoCharacter,
+    tileEditor?: TileEditor
   ) {
     this.scene = scene;
     this.grid = grid;
     this.iso = iso;
     this.player = player;
+    this.tileEditor = tileEditor;
 
     this.cursors = scene.input.keyboard!.createCursorKeys();
     this.wasd = scene.input.keyboard!.addKeys("W,A,S,D") as {
@@ -46,6 +50,11 @@ export class PlayerController {
     );
 
     scene.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      // ✅ Перевіряємо, чи не активний режим редагування
+      if (this.tileEditor?.isEditMode()) {
+        return; // Не обробляємо клік для руху, якщо редагуємо тайли
+      }
+
       const wp = p.positionToCamera(scene.cameras.main) as Phaser.Math.Vector2;
       const cell = iso.screenToCell(wp.x, wp.y);
       if (!cell) return;
