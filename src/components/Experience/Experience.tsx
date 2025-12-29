@@ -1,4 +1,4 @@
-import { PhaserCanvas } from "../PhaserCanvas";
+import { KaboomCanvas } from "../KaboomCanvas";
 
 const Experience = () => {
   return (
@@ -11,12 +11,12 @@ const Experience = () => {
       }}
     >
       <h1 style={{ fontSize: 20, marginBottom: 10 }}>
-        Isometric Phaser + React шаблон
+        Isometric Kaboom + React шаблон
       </h1>
       <p style={{ opacity: 0.75, marginBottom: 12 }}>
         Стрілки/WASD — крок. Клік по тайлу — рух по A*.
       </p>
-      <PhaserCanvas />
+      <KaboomCanvas />
     </div>
   );
 };
