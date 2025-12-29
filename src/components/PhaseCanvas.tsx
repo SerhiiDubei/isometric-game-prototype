@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import Phaser from "phaser";
 import { createGame } from "../game/utils/createGame";
@@ -26,7 +26,7 @@ export function PhaserCanvas({
         setTimeout(checkScene, 100);
       }
     };
-    
+
     // Починаємо перевірку після невеликої затримки
     setTimeout(checkScene, 100);
 
