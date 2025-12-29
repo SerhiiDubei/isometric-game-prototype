@@ -60,15 +60,20 @@ async function start(k: KaboomCtx) {
   // --- LOAD HERO SPRITESHEET ---
   // ⚠️ Замінити sliceX/sliceY і ranges під твій файл
   // Наприклад: якщо в одному рядку 12 кадрів, а рядків 8 -> sliceX=12, sliceY=8
-  await k.loadSprite("hero", "./sprites/hero.png", {
-    sliceX: 12,
-    sliceY: 8,
-    anims: {
-      // приклад: перший ряд (0..11) idle, другий ряд (12..23) walk
-      idle: { from: 0, to: 11, loop: true, speed: 10 },
-      walk: { from: 12, to: 23, loop: true, speed: 12 },
-    },
-  });
+  try {
+    await k.loadSprite("hero", "sprites/magic-hero.jpg", {
+      sliceX: 12,
+      sliceY: 8,
+      anims: {
+        // приклад: перший ряд (0..11) idle, другий ряд (12..23) walk
+        idle: { from: 0, to: 11, loop: true, speed: 10 },
+        walk: { from: 12, to: 23, loop: true, speed: 12 },
+      },
+    });
+  } catch (error) {
+    console.error("Error loading hero sprite:", error);
+    k.add([k.rect(16, 16), k.color(255, 0, 0), k.pos(0, 0)]);
+  }
 
   // --- DEMO WALLS ---
   for (let x = 9; x < 16; x++) setBlocked({ x, y: 6 }, 1);
@@ -90,12 +95,13 @@ async function start(k: KaboomCtx) {
   let queuedPath: Point[] = [];
 
   const player = k.add([
-    k.sprite("hero", { anim: "idle" }),
-    k.pos(0, 0),
+    k.sprite("hero", { anim: "idle", frame: 0 }),
+    k.pos(1, 1),
+    k.scale(2), // збільш, щоб точно було видно
     k.anchor("center"),
-    k.scale(1),
-    k.z(9999),
+    k.z(1000000),
   ]);
+  player.play("idle");
 
   placePlayer(playerCell);
 

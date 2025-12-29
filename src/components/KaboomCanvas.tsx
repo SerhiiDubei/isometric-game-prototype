@@ -10,13 +10,7 @@ export function KaboomCanvas() {
     if (!c) return;
 
     destroyRef.current = createKaboomGame({ canvas: c });
-
-    return () => {
-      destroyRef.current?.();
-      destroyRef.current = null;
-    };
   }, []);
-
   return (
     <canvas
       ref={canvasRef}
