@@ -6,14 +6,15 @@ import { astar } from "../utils/astar";
 const TILE_W = 64;
 const TILE_H = 32;
 
-const COLS = 20;
-const ROWS = 14;
+const COLS = 240;
+const ROWS = 240;
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export class IsoScene extends Phaser.Scene {
   private ox = 0;
   private oy = 0;
+  private isAnimating = false;
 
   private blocked = new Uint8Array(COLS * ROWS); // 0 free, 1 wall
   private floorTexKey = "floor";
@@ -34,6 +35,24 @@ export class IsoScene extends Phaser.Scene {
 
   constructor() {
     super("IsoScene");
+  }
+
+  private static HERO_KEY = "hero";
+
+  preload() {
+    // ✅ тимчасово став будь-які frameWidth/frameHeight (потім уточнимо)
+    // ВАЖЛИВО: якщо frame не співпаде — спрайт може виглядати дивно,
+    // але ми зможемо це швидко перевірити через debug нижче.
+    const FRAME_W = 184;
+    const FRAME_H = 325;
+
+    this.load.spritesheet(IsoScene.HERO_KEY, "/sprites/capguy-walk-1472.png", {
+      frameWidth: FRAME_W,
+      frameHeight: FRAME_H,
+      // якщо у файлі є відступи між кадрами:
+      // margin: 0,
+      // spacing: 0,
+    });
   }
 
   create() {
@@ -59,9 +78,7 @@ export class IsoScene extends Phaser.Scene {
     this.player.setOrigin(0.5, 0.85);
     this.placePlayer(this.playerCell);
 
-    // камера
-    this.cameras.main.setBackgroundColor("#0b0b0f");
-
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     // клік по тайлу -> A* -> рух
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       const cell = this.pickCell(p.worldX, p.worldY);
@@ -85,6 +102,7 @@ export class IsoScene extends Phaser.Scene {
       this.recalcOrigin();
       this.redraw();
       this.placePlayer(this.playerCell);
+      // ✅ спочатку миттєво центруємо камеру на гравця
     });
   }
 
@@ -106,7 +124,10 @@ export class IsoScene extends Phaser.Scene {
       (this.cursors.down.isDown || this.wasd.S.isDown ? 1 : 0) +
       (this.cursors.up.isDown || this.wasd.W.isDown ? -1 : 0);
 
-    if (dx === 0 && dy === 0) return;
+    if (dx === 0 && dy === 0) {
+      this.player.play("hero-idle", true);
+      return;
+    }
 
     // один крок за раз
     const target = {
@@ -114,7 +135,11 @@ export class IsoScene extends Phaser.Scene {
       y: clamp(this.playerCell.y + Math.sign(dy), 0, ROWS - 1),
     };
 
-    if (this.isBlocked(target)) return;
+    if (this.isBlocked(target)) {
+      this.player.play("hero-idle", true);
+      return;
+    }
+    this.player.play("hero-walk", true);
     this.moveToCell(target);
   }
 
@@ -196,13 +221,54 @@ export class IsoScene extends Phaser.Scene {
     }
   }
 
+  private createHeroAnims() {
+    // Якщо анімації вже створені (Phaser кешує), пропускаємо
+    if (this.anims.exists("hero-idle")) return;
+
+    // ⚠️ Тут треба правильні ranges під твій sheet.
+    // Для старту зробимо простий тест: idle = кадри 0..7, walk = 8..15.
+    // Якщо кадри не ті — скажеш скільки колонок/рядків, і я дам точні.
+    this.anims.create({
+      key: "hero-idle",
+      frames: this.anims.generateFrameNumbers(IsoScene.HERO_KEY, {
+        start: 0,
+        end: 0,
+      }),
+      frameRate: 1,
+    });
+
+    this.anims.create({
+      key: "hero-walk",
+      frames: this.anims.generateFrameNumbers(IsoScene.HERO_KEY, {
+        start: 0,
+        end: 7,
+      }),
+      frameRate: 20,
+      repeat: -1,
+    });
+
+    // ✅ Debug: перевіримо, що текстура реально завантажилась і які її розміри
+    const img = this.textures
+      .get(IsoScene.HERO_KEY)
+      .getSourceImage() as HTMLImageElement;
+    console.log("HERO image size:", img?.width, img?.height);
+    console.log(
+      "HERO frames:",
+      this.textures.get(IsoScene.HERO_KEY).frameTotal
+    );
+  }
+
   private redraw() {
     this.children.removeAll(true);
     this.createTileTextures();
     this.drawMap();
+    this.createHeroAnims();
 
-    this.player = this.add.sprite(0, 0, this.makePlayerTexture());
+    this.player = this.add.sprite(0, 0, IsoScene.HERO_KEY);
     this.player.setOrigin(0.5, 0.85);
+    this.player.setScale(0.4);
+    this.placePlayer(this.playerCell);
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
   }
 
   // --- player
