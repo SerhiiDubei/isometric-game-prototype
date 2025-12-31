@@ -1,7 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/((?!assets|sprites|tiles|vite\\.svg|.*\\.(js|css|png|jpg|jpeg|svg|json|ico|woff|woff2|ttf|eot)).*)",
+      "source": "/(.*\\.(js|css|png|jpg|jpeg|svg|json|ico|woff|woff2|ttf|eot))",
+      "destination": "/$1"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
