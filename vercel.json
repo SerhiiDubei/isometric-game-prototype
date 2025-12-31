@@ -1,12 +1,7 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "vite",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!assets|sprites|tiles|vite\\.svg|.*\\.(js|css|png|jpg|jpeg|svg|json|ico|woff|woff2|ttf|eot)).*)",
       "destination": "/index.html"
     }
   ]
