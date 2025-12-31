@@ -5,8 +5,10 @@ export class ControlsHint {
   private container!: Phaser.GameObjects.Container;
   private background!: Phaser.GameObjects.Graphics;
   private visible: boolean = true;
+  private scene: Phaser.Scene;
 
-  constructor(private scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene) {
+    this.scene = scene;
     this.create();
   }
 
@@ -33,7 +35,11 @@ export class ControlsHint {
     this.container.add(title);
 
     // Список клавіш
-    const controls = [
+    type ControlItem = 
+      | { section: string; keys: never[] }
+      | { key: string; action: string };
+    
+    const controls: ControlItem[] = [
       { section: 'Movement', keys: [] },
       { key: 'WASD/Arrows', action: 'Move' },
       { key: 'Shift + Move', action: 'Run' },
@@ -68,7 +74,7 @@ export class ControlsHint {
         sectionText.setOrigin(0.5, 0);
         this.container.add(sectionText);
         yOffset += 20;
-      } else if ('key' in control && 'action' in control) {
+      } else if ('key' in control && 'action' in control && control.key && control.action) {
         // Клавіша
         const keyText = this.scene.add.text(15, yOffset, control.key, {
           fontSize: '11px',
