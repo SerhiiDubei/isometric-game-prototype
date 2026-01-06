@@ -1,7 +1,7 @@
 export const GAME = {
   tileW: 82,
   tileH: 42,
-  cols: 240,
+  cols: 240, // ✅ Повертаю назад
   rows: 240,
 } as const;
 

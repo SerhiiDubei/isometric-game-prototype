@@ -14,7 +14,7 @@ import { calculateCharacterParams, type CharacterConfig, ANIMATION_SPEED_CONSTAN
 const CHARACTER_CONFIGS: Record<string, CharacterConfig> = {
   hero: {
     key: "hero",
-    url: "/sprites/capguy-walk-1472.png",
+    url: "/gfx/sprites/capguy-walk-1472.png",
     frameW: 184,
     frameH: 325,
     walkFrameCount: 8,  // Стандартний spritesheet має 8 кадрів

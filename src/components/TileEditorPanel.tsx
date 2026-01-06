@@ -6,6 +6,7 @@ interface TileEditorPanelProps {
   onTileSelect: (tileId: string | null) => void;
   onClear: () => void;
   onSave: () => void;
+  onClearSaved?: () => void;
   selectedTileId: string | null;
   drawMode: DrawMode;
   onDrawModeChange: (mode: DrawMode) => void;
@@ -15,6 +16,7 @@ export function TileEditorPanel({
   onTileSelect,
   onClear,
   onSave,
+  onClearSaved,
   selectedTileId,
   drawMode,
   onDrawModeChange,
@@ -164,6 +166,23 @@ export function TileEditorPanel({
         >
           Очистити
         </button>
+        {onClearSaved && (
+          <button
+            onClick={onClearSaved}
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#ff8800",
+              color: "#fff",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+            title="Очистити збережену карту з localStorage"
+          >
+            Очистити збережену
+          </button>
+        )}
         <button
           onClick={() => onTileSelect(null)}
           style={{

@@ -380,6 +380,12 @@ export class TileEditor {
     }
   }
 
+  // ✅ Очистити збережену карту
+  clearSavedMap() {
+    localStorage.removeItem("mapTiles");
+    console.log("✅ Збережена карта очищена!");
+  }
+
   destroy() {
     // ✅ UI тепер в React, нічого не потрібно видаляти
   }

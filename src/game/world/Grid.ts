@@ -5,7 +5,8 @@ import type { TileConfig } from "../config/tiles";
 
 export class Grid {
   private blocked: Uint8Array;
-  private tileTypes: Map<number, string> = new Map(); // ✅ Зберігаємо типи тайлів
+  private tileTypes: Map<number, string> = new Map(); // ✅ Зберігаємо типи тайлів (підлога)
+  private objectTypes: Map<number, string> = new Map(); // ✅ Зберігаємо об'єкти (бочки, декорації)
 
   public cols: number;
   public rows: number;
@@ -32,13 +33,19 @@ export class Grid {
     this.blocked[this.idx(p)] = v ? 1 : 0;
   }
 
-  // ✅ Отримати тип тайла
+  // ✅ Отримати тип тайла (підлога)
   getTileType(p: GridPoint): string | null {
     const idx = this.idx(p);
     return this.tileTypes.get(idx) || null;
   }
 
-  // ✅ Встановити тип тайла
+  // ✅ Отримати тип об'єкта
+  getObjectType(p: GridPoint): string | null {
+    const idx = this.idx(p);
+    return this.objectTypes.get(idx) || null;
+  }
+
+  // ✅ Встановити тип тайла (підлога)
   setTileType(p: GridPoint, tileId: string | null, tileConfig: TileConfig) {
     const idx = this.idx(p);
     if (tileId) {
@@ -47,6 +54,27 @@ export class Grid {
     } else {
       this.tileTypes.delete(idx);
       this.setBlocked(p, false);
+    }
+  }
+
+  // ✅ Встановити об'єкт (декорація поверх підлоги)
+  setObjectType(p: GridPoint, objectId: string | null, objectConfig: TileConfig) {
+    const idx = this.idx(p);
+    if (objectId) {
+      this.objectTypes.set(idx, objectId);
+      // Об'єкт може блокувати прохід
+      if (!objectConfig.walkable) {
+        this.setBlocked(p, true);
+      }
+    } else {
+      this.objectTypes.delete(idx);
+      // При видаленні об'єкта, відновлюємо блокування з підлоги
+      const floorTileId = this.getTileType(p);
+      if (floorTileId) {
+        // Треба знайти конфіг підлоги, але це складно тут...
+        // Поки що просто знімаємо блокування
+        this.setBlocked(p, false);
+      }
     }
   }
 
@@ -92,6 +120,428 @@ export class Grid {
   setDemoWalls() {
     for (let x = 9; x < 16; x++) this.setBlocked({ x, y: 6 }, true);
     for (let y = 7; y < 10; y++) this.setBlocked({ x: 15, y }, true);
+  }
+
+  // ✅ Генерувати якісну багатошарову карту з різними зонами
+  generateQualityMap(getTileConfig: (tileId: string) => TileConfig | undefined) {
+    // Очищаємо попередні дані
+    this.tileTypes.clear();
+    this.objectTypes.clear(); // ✅ Очищаємо об'єкти також!
+    this.blocked.fill(0);
+
+    const floorCfg = getTileConfig('floor');
+    const wallCfg = getTileConfig('wall');
+    const waterCfg = getTileConfig('water');
+    const stoneCfg = getTileConfig('stone');
+
+    // === ШАР 1: БАЗОВИЙ ШАР - білий floor по всій карті ===
+    if (floorCfg) {
+      for (let y = 0; y < this.rows; y++) {
+        for (let x = 0; x < this.cols; x++) {
+          const p = { x, y };
+          if (this.inBounds(p)) {
+            this.setTileType(p, 'floor', floorCfg);
+          }
+        }
+      }
+      console.log('✅ Базовий шар (floor) створено!');
+    }
+
+    // === ШАР 2: ВОДА (невелика зона) ===
+    if (waterCfg) {
+      const centerX = Math.floor(this.cols / 2);
+      const centerY = Math.floor(this.rows / 2);
+      
+      // Невелике озеро
+      for (let y = centerY - 5; y < centerY + 5; y++) {
+        for (let x = centerX - 5; x < centerX + 5; x++) {
+          const p = { x, y };
+          if (this.inBounds(p) && Math.random() > 0.3) {
+            this.setTileType(p, 'water', waterCfg);
+          }
+        }
+      }
+      console.log('✅ Вода створена!');
+    }
+
+    // === ШАР 3: ЛІС (5x5 зона) ===
+    const forestCfg = getTileConfig('forest');
+    if (forestCfg) {
+      const spawnX = 80;
+      const spawnY = 100;
+      for (let dy = 0; dy < 5; dy++) {
+        for (let dx = 0; dx < 5; dx++) {
+          const p = { x: spawnX + 10 + dx, y: spawnY - 10 + dy };
+          if (this.inBounds(p)) {
+            const existingTile = this.getTileType(p);
+            if (existingTile !== 'water') {
+              this.setTileType(p, 'forest', forestCfg);
+            }
+          }
+        }
+      }
+      console.log('✅ Ліс 5x5 створено!');
+    }
+
+    // === ШАР 4: DIRT ЗОНИ ===
+    const dirtTilesCfg = getTileConfig('dirt_tiles');
+    const dirtCfg = getTileConfig('dirt');
+    if (dirtTilesCfg && dirtCfg) {
+      const dirtZone1StartX = 70;
+      const dirtZone1StartY = 90;
+      const dirtZone1Width = 20;
+      const dirtZone1Height = 20;
+      let dirtCount = 0;
+
+      for (let dy = 0; dy < dirtZone1Height; dy++) {
+        for (let dx = 0; dx < dirtZone1Width; dx++) {
+          const p = { x: dirtZone1StartX + dx, y: dirtZone1StartY + dy };
+          if (this.inBounds(p)) {
+            const existingTile = this.getTileType(p);
+            if (existingTile !== 'water' && existingTile !== 'forest') {
+              const seed = p.x * 31 + p.y * 17;
+              const isDirtTiles = (seed % 3 === 0);
+              this.setTileType(p, isDirtTiles ? 'dirt_tiles' : 'dirt', isDirtTiles ? dirtTilesCfg : dirtCfg);
+              dirtCount++;
+            }
+          }
+        }
+      }
+
+      console.log(`✅ DIRT зони створено (${dirtCount} тайлів)!`);
+    }
+
+    // === ШАР 5: БОЧКИ (поверх підлоги) ===
+    const barrelCfg = getTileConfig('barrel');
+    if (barrelCfg) {
+      const barrelPositions = [
+        { x: 82, y: 98 },
+        { x: 85, y: 95 },
+        { x: 78, y: 102 },
+        { x: 88, y: 100 },
+        { x: 75, y: 97 },
+      ];
+
+      barrelPositions.forEach((pos) => {
+        if (this.inBounds(pos)) {
+          this.setObjectType(pos, 'barrel', barrelCfg);
+        }
+      });
+
+      console.log(`✅ Бочки створено (${barrelPositions.length} штук)!`);
+    }
+
+    // === ШАР 6: КІМНАТА З ПРОХОДОМ ===
+    this.generateRoom(
+      { x: 100, y: 120 }, // Позиція кімнати
+      { width: 10, height: 8 }, // Розмір
+      { x: 104, y: 120 }, // Прохід (двері) - північ, по центру
+      getTileConfig
+    );
+
+    console.log('✅ Карта згенерована (floor + water + forest + DIRT + barrel + кімната з проходом)!');
+  }
+
+  // ✅ Генерує лісову зону з різними деревами
+  private generateForestZone(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const treeTypes = ['tree1', 'tree2', 'tree3', 'tree4', 'trees'];
+    const treeCount = Math.floor((size.width * size.height) / (20 * 20)); // ~1 дерево на 20x20 клітинок
+    
+    for (let i = 0; i < treeCount; i++) {
+      const x = topLeft.x + Math.floor(Math.random() * size.width);
+      const y = topLeft.y + Math.floor(Math.random() * size.height);
+      const p = { x, y };
+      
+      if (this.inBounds(p) && !this.isBlocked(p)) {
+        const treeType = treeTypes[Math.floor(Math.random() * treeTypes.length)];
+        const treeCfg = getTileConfig(treeType);
+        if (treeCfg) {
+          this.setTileType(p, treeType, treeCfg);
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує піщаний пляж
+  private generateBeachZone(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const groundCfg = getTileConfig('ground');
+    if (!groundCfg) return;
+
+    for (let y = topLeft.y; y < topLeft.y + size.height && y < this.rows; y++) {
+      for (let x = topLeft.x; x < topLeft.x + size.width && x < this.cols; x++) {
+        const p = { x, y };
+        if (this.inBounds(p) && !this.isBlocked(p)) {
+          this.setTileType(p, 'ground', groundCfg);
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує гірську зону
+  private generateMountainZone(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const stoneCfg = getTileConfig('stone');
+    if (!stoneCfg) return;
+
+    // Створюємо гірський рельєф з випадковим камінням
+    for (let y = topLeft.y; y < topLeft.y + size.height && y < this.rows; y++) {
+      for (let x = topLeft.x; x < topLeft.x + size.width && x < this.cols; x++) {
+        // Випадкове розміщення каменів (30% покриття)
+        if (Math.random() < 0.3) {
+          const p = { x, y };
+          if (this.inBounds(p) && !this.isBlocked(p)) {
+            this.setTileType(p, 'stone', stoneCfg);
+          }
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує зону полів
+  private generateFieldZone(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const groundCfg = getTileConfig('ground');
+    if (!groundCfg) return;
+
+    for (let y = topLeft.y; y < topLeft.y + size.height && y < this.rows; y++) {
+      for (let x = topLeft.x; x < topLeft.x + size.width && x < this.cols; x++) {
+        const p = { x, y };
+        if (this.inBounds(p) && !this.isBlocked(p)) {
+          this.setTileType(p, 'ground', groundCfg);
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує рівнинну зону
+  private generatePlainsZone(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const grassCfg = getTileConfig('grass');
+    if (!grassCfg) return;
+
+    // Рівнина - просто трава (вже є в базовому шарі, але можна додати варіації)
+    // Тут можна додати окремі типи трав для різноманітності
+  }
+
+  // ✅ Генерує звивисту ріку
+  private generateRiver(
+    start: GridPoint,
+    end: GridPoint,
+    width: number,
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const waterCfg = getTileConfig('water');
+    if (!waterCfg) return;
+
+    const steps = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+    
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps;
+      // Додаємо випадкові відхилення для звивистості
+      const noiseX = Math.sin(t * Math.PI * 4) * (15 * 4);
+      const noiseY = Math.cos(t * Math.PI * 3) * (10 * 4);
+      
+      const x = Math.floor(start.x + (end.x - start.x) * t + noiseX);
+      const y = Math.floor(start.y + (end.y - start.y) * t + noiseY);
+      
+      // Малюємо ріку з шириною
+      for (let dx = -width / 2; dx < width / 2; dx++) {
+        for (let dy = -width / 4; dy < width / 4; dy++) {
+          const p = { x: x + dx, y: y + dy };
+          if (this.inBounds(p)) {
+            this.setTileType(p, 'water', waterCfg);
+          }
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує озеро
+  private generateLake(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const waterCfg = getTileConfig('water');
+    if (!waterCfg) return;
+
+    // Створюємо овальне озеро
+    const centerX = topLeft.x + size.width / 2;
+    const centerY = topLeft.y + size.height / 2;
+    const radiusX = size.width / 2;
+    const radiusY = size.height / 2;
+
+    for (let y = topLeft.y; y < topLeft.y + size.height && y < this.rows; y++) {
+      for (let x = topLeft.x; x < topLeft.x + size.width && x < this.cols; x++) {
+        const dx = (x - centerX) / radiusX;
+        const dy = (y - centerY) / radiusY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Овальна форма з плавними краями
+        if (dist < 1.0) {
+          const p = { x, y };
+          if (this.inBounds(p)) {
+            this.setTileType(p, 'water', waterCfg);
+          }
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує кімнату з стінами (з правильними орієнтаціями!)
+  private generateRoom(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    doorway: GridPoint | null, // ✅ Позиція проходу (двері), null = без проходу
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    // Створюємо стіни по периметру з правильними орієнтаціями
+    for (let x = topLeft.x; x < topLeft.x + size.width; x++) {
+      for (let y = topLeft.y; y < topLeft.y + size.height; y++) {
+        const p = { x, y };
+        if (!this.inBounds(p)) continue;
+
+        // ✅ Якщо це позиція проходу (дверей) - пропускаємо
+        if (doorway && p.x === doorway.x && p.y === doorway.y) {
+          continue;
+        }
+
+        let wallId: string | null = null;
+
+        // Визначаємо орієнтацію стіни залежно від позиції
+        if (y === topLeft.y && x !== topLeft.x && x !== topLeft.x + size.width - 1) {
+          // Верхня стіна (горизонтальна) - North
+          wallId = 'stonewall_n';
+        } else if (y === topLeft.y + size.height - 1 && x !== topLeft.x && x !== topLeft.x + size.width - 1) {
+          // Нижня стіна (горизонтальна) - South
+          wallId = 'stonewall_s';
+        } else if (x === topLeft.x && y !== topLeft.y && y !== topLeft.y + size.height - 1) {
+          // Ліва стіна (вертикальна) - West
+          wallId = 'stonewall_w';
+        } else if (x === topLeft.x + size.width - 1 && y !== topLeft.y && y !== topLeft.y + size.height - 1) {
+          // Права стіна (вертикальна) - East
+          wallId = 'stonewall_e';
+        }
+        // Кути пропускаємо (або можна додати кутові стіни пізніше)
+
+        if (wallId) {
+          const wallCfg = getTileConfig(wallId);
+          if (wallCfg) {
+            this.setObjectType(p, wallId, wallCfg);
+          }
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує дорогу
+  private generateRoad(
+    start: GridPoint,
+    end: GridPoint,
+    width: number,
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const stoneCfg = getTileConfig('stone');
+    if (!stoneCfg) return;
+
+    const steps = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+    
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps;
+      const x = Math.floor(start.x + (end.x - start.x) * t);
+      const y = Math.floor(start.y + (end.y - start.y) * t);
+      
+      // Малюємо дорогу
+      for (let dx = -width / 2; dx < width / 2; dx++) {
+        for (let dy = -width / 2; dy < width / 2; dy++) {
+          const p = { x: x + dx, y: y + dy };
+          if (this.inBounds(p) && !this.isBlocked(p)) {
+            this.setTileType(p, 'stone', stoneCfg);
+          }
+        }
+      }
+    }
+  }
+
+  // ✅ Генерує село з будинками
+  private generateVillage(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    getTileConfig: (tileId: string) => TileConfig | undefined,
+    scale: number
+  ) {
+    // Підлога для будинків
+    const floorCfg = getTileConfig('floor');
+    if (floorCfg) {
+      for (let y = topLeft.y; y < topLeft.y + size.height && y < this.rows; y++) {
+        for (let x = topLeft.x; x < topLeft.x + size.width && x < this.cols; x++) {
+          const p = { x, y };
+          if (this.inBounds(p) && !this.isBlocked(p)) {
+            this.setTileType(p, 'floor', floorCfg);
+          }
+        }
+      }
+    }
+
+    // Будинки
+    this.buildLargeHouse1(
+      { x: topLeft.x + 10 * scale, y: topLeft.y + 10 * scale },
+      getTileConfig,
+      scale
+    );
+    this.buildLargeHouse2(
+      { x: topLeft.x + 35 * scale, y: topLeft.y + 10 * scale },
+      getTileConfig,
+      scale
+    );
+    this.buildLargeHouse3(
+      { x: topLeft.x + 20 * scale, y: topLeft.y + 30 * scale },
+      getTileConfig,
+      scale
+    );
+  }
+
+  // ✅ Додає декорації до зони
+  private addDecorationsToZone(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    decorationTypes: string[],
+    coverage: number, // 0.0 - 1.0 (відсоток покриття)
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    const totalCells = size.width * size.height;
+    const decorationCount = Math.floor(totalCells * coverage);
+
+    for (let i = 0; i < decorationCount; i++) {
+      const x = topLeft.x + Math.floor(Math.random() * size.width);
+      const y = topLeft.y + Math.floor(Math.random() * size.height);
+      const p = { x, y };
+      
+      if (this.inBounds(p) && !this.isBlocked(p)) {
+        const decorationType = decorationTypes[Math.floor(Math.random() * decorationTypes.length)];
+        const decorationCfg = getTileConfig(decorationType);
+        if (decorationCfg) {
+          this.setTileType(p, decorationType, decorationCfg);
+        }
+      }
+    }
   }
 
   // ✅ Створити локацію з будинками, рікою та дорогою

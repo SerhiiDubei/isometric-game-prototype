@@ -43,6 +43,14 @@ const Experience = () => {
     }
   }, [scene]);
 
+  const handleClearSaved = useCallback(() => {
+    if (scene?.tileEditor) {
+      scene.tileEditor.clearSavedMap();
+      setSaveMessage("Збережена карта очищена! Перезавантажте сторінку.");
+      setTimeout(() => setSaveMessage(null), 3000);
+    }
+  }, [scene]);
+
   const handleDrawModeChange = useCallback(
     (mode: DrawMode) => {
       if (scene?.tileEditor) {
@@ -77,6 +85,7 @@ const Experience = () => {
             onTileSelect={handleTileSelect}
             onClear={handleClear}
             onSave={handleSave}
+            onClearSaved={handleClearSaved}
             selectedTileId={selectedTileId}
             drawMode={drawMode}
             onDrawModeChange={handleDrawModeChange}

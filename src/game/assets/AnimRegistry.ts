@@ -21,9 +21,9 @@ export function preloadSprites(scene: Phaser.Scene) {
       const sourceKey = ('spriteSourceKey' in s && s.spriteSourceKey) ? s.spriteSourceKey as string : s.key;
       
       // Визначаємо базовий шлях (використовуємо sourceKey!)
-      let basePath = `/sprites/${sourceKey}/animations`;
+      let basePath = `/gfx/sprites/${sourceKey}/animations`;
       if (sourceKey === "cyberpunk-marsian") {
-        basePath = "/sprites/cyberpunk-marsian/animations";
+        basePath = "/gfx/sprites/cyberpunk-marsian/animations";
       }
       
       directions.forEach((dir) => {
