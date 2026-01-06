@@ -130,9 +130,7 @@ export class Grid {
     this.blocked.fill(0);
 
     const floorCfg = getTileConfig('floor');
-    const wallCfg = getTileConfig('wall');
     const waterCfg = getTileConfig('water');
-    const stoneCfg = getTileConfig('stone');
 
     // === ШАР 1: БАЗОВИЙ ШАР - білий floor по всій карті ===
     if (floorCfg) {
@@ -242,7 +240,8 @@ export class Grid {
     console.log('✅ Карта згенерована (floor + water + forest + DIRT + barrel + кімната з проходом)!');
   }
 
-  // ✅ Генерує лісову зону з різними деревами
+  // ✅ Генерує лісову зону з різними деревами (для майбутнього використання)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private generateForestZone(
     topLeft: GridPoint,
     size: { width: number; height: number },
