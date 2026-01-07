@@ -178,36 +178,18 @@ export class TileRenderer {
         const centerPoint: GridPoint = { x: centerX, y: centerY };
         let { x: sx, y: sy } = this.iso.cellToScreen(centerPoint);
         
-        // ✅ Якщо це South-стіна, зсуваємо її вниз на основі візуальної висоти sprite
+        // ✅ Якщо це South-стіна, зсуваємо її вниз на 1 клітинку (42px)
         if (tileId.includes('_s') || tileId.includes('corner_s')) {
-          // ✅ Динамічний offset на основі візуальної висоти sprite
-          const texture = this.scene.textures.exists(key) 
-            ? this.scene.textures.get(key) 
-            : null;
+          // ✅ ФІКСОВАНИЙ offset: 1 клітинка (42px)
+          // Це зміщує South-стіну вниз на висоту однієї клітинки,
+          // щоб вона візуально знаходилася в нижній частині grid 2×2
+          const SOUTH_OFFSET = H; // 42px = 1 клітинка
+          sx -= SOUTH_OFFSET; // вліво
+          sy += SOUTH_OFFSET; // вниз
           
-          if (texture && texture.source[0]) {
-            const spriteHeight = texture.source[0].height * scaleY;
-            const cellsOccupied = Math.ceil(spriteHeight / H);
-            
-            // Зміщуємо на половину різниці між візуальною та grid-висотою + базовий offset
-            const visualExtraHeight = (cellsOccupied - gridH) * H * 0.5;
-            const SOUTH_OFFSET = H + visualExtraHeight; // Базовий offset (1 клітинка) + екстра
-            
-            sx -= SOUTH_OFFSET; // вліво
-            sy += SOUTH_OFFSET; // вниз
-            
-            console.log(
-              `🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): ` +
-              `spriteH=${spriteHeight.toFixed(0)}px, cells=${cellsOccupied}, ` +
-              `gridH=${gridH}, offset=${SOUTH_OFFSET.toFixed(0)}px`
-            );
-          } else {
-            // Fallback до фіксованого offset (2 клітинки)
-            const SOUTH_OFFSET = H * 2; // 84px
-            sx -= SOUTH_OFFSET;
-            sy += SOUTH_OFFSET;
-            console.log(`🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): fallback offset=${SOUTH_OFFSET}px`);
-          }
+          console.log(
+            `🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): offset=${SOUTH_OFFSET}px (1 cell)`
+          );
         }
 
         // ✅ Визначаємо origin в залежності від типу тайла
