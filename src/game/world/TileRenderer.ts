@@ -212,6 +212,48 @@ export class TileRenderer {
           originY = 1; // ✅ Низ по центру (для об'єктів, стін та DIRT!)
         }
         
+        // ✅ НОВИЙ КОД: Покласти ground tiles під стінами для візуалізації зайнятих клітин
+        if (layerType === 'object' && isWallTile) {
+          // Покласти ground tile для кожної зайнятої клітини
+          for (let dy = 0; dy < gridH; dy++) {
+            for (let dx = 0; dx < gridW; dx++) {
+              const cellX = x + dx;
+              const cellY = y + dy;
+              const cellP: GridPoint = { x: cellX, y: cellY };
+              
+              // Отримуємо позицію клітини на екрані
+              const groundPos = this.iso.cellToScreen(cellP);
+              
+              // Створюємо ground sprite для візуалізації зайнятої клітини
+              // Створюємо простий кольоровий спрайт (якщо ще не створено)
+              if (!this.scene.textures.exists('debug_ground')) {
+                const graphics = this.scene.add.graphics();
+                graphics.fillStyle(0xFFFF00, 1); // Жовтий колір
+                graphics.fillRect(0, 0, W, H);
+                graphics.generateTexture('debug_ground', W, H);
+                graphics.destroy();
+                console.log('🟨 [DEBUG] Created debug_ground texture');
+              }
+              
+              const groundSprite = this.scene.add.image(groundPos.x, groundPos.y, 'debug_ground');
+              groundSprite.setOrigin(0.5, 0.5);
+              groundSprite.setDisplaySize(W, H);
+              groundSprite.setTint(0xFFFF00); // Жовтий колір для видимості
+              groundSprite.setAlpha(0.6); // Трохи прозорий
+              
+              // Depth: нижче за стіну (між floor=0 і object=10)
+              const depthCenterX = cellX + 0.5;
+              const depthCenterY = cellY + 0.5;
+              const baseDepth = (depthCenterX + depthCenterY) * 100;
+              groundSprite.setDepth(baseDepth + 5); // Layer 5
+              
+              targetContainer.add(groundSprite);
+              
+              console.log(`🟫 [DEBUG GROUND] Ground tile at cell (${cellX},${cellY}) under ${tileId}, depth=${baseDepth + 5}`);
+            }
+          }
+        }
+        
         const spr = this.scene.add.image(sx, sy, key).setOrigin(originX, originY);
         
         // ✅ Scale вже обчислено вище для динамічного offset
@@ -344,7 +386,14 @@ export class TileRenderer {
 
         // ✅ Вимкнемо фільтри та ефекти, які можуть додавати контур
         spr.setTint(0xffffff); // Без відтінку
-        spr.setAlpha(1); // Повна непрозорість
+        
+        // ✅ Зробити стіни напівпрозорими для візуалізації ground під ними
+        if (layerType === 'object' && isWallTile) {
+          spr.setAlpha(0.5); // 50% прозорості
+          console.log(`👻 [WALL ALPHA] ${tileId} at (${x},${y}) set to alpha=0.5`);
+        } else {
+          spr.setAlpha(1); // Повна непрозорість для інших об'єктів
+        }
 
         // ✅ Встановлюємо фільтр для уникнення артефактів при масштабуванні
         if (spr.texture) {
