@@ -36,7 +36,13 @@ export function preloadSprites(scene: Phaser.Scene) {
         }
         
         // Завантажуємо idle анімацію
-        const idlePath = sourceKey === "cyberpunk-marsian" ? "breathing-idle" : "idle";
+        let idlePath = "idle";
+        if (sourceKey === "cyberpunk-marsian") {
+          idlePath = "breathing-idle";
+        } else if (sourceKey === "islamic-leader") {
+          idlePath = "idle"; // ✅ Для islamic-leader використовуємо "idle"
+        }
+        
         for (let i = 0; i < idleFrameCount; i++) {
           const frameKey = `${s.key}-idle-${dir}-${i}`;
           const paddedIndex = i.toString().padStart(3, '0');

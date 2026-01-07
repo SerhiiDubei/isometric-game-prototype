@@ -39,7 +39,26 @@ export class TileRenderer {
     this.objectLayer.removeAll(true);
     // ✅ characterLayer НЕ очищаємо - там герой!
     
-    const { tileW: W, tileH: H } = this.iso;
+    // ✅ Діагностика: виводимо конфігурацію стін і кутів
+    const walls = TILE_CONFIGS.filter((t) => 
+      t.id.startsWith('stonewall_')
+    );
+    console.log('🔍 [WALL CONFIG] Прямі стіни:', 
+      walls.filter((t) => !t.id.includes('corner')).map((t) => ({
+        id: t.id,
+        gridSize: t.gridSize,
+        scale: t.scale,
+        offset: t.offset
+      }))
+    );
+    console.log('🔍 [WALL CONFIG] Кути:', 
+      walls.filter((t) => t.id.includes('corner')).map((t) => ({
+        id: t.id,
+        gridSize: t.gridSize,
+        scale: t.scale,
+        offset: t.offset
+      }))
+    );
     
     // ✅ ПРОХІД 1: Малюємо підлогу (floor)
     this.renderLayer('floor');
@@ -74,6 +93,11 @@ export class TileRenderer {
           tileId = this.grid.getObjectType(p);
           // Для об'єктів: якщо немає, пропускаємо
           if (!tileId) continue;
+          
+          // ✅ Діагностика: логуємо кути, якщо вони знайдені
+          if (tileId.includes('corner')) {
+            console.log(`🔍 [CORNER FOUND] ${tileId} at (${x}, ${y})`);
+          }
         }
         
         const tileConfig = TILE_CONFIGS.find((t) => t.id === tileId);
@@ -135,10 +159,15 @@ export class TileRenderer {
 
         // ✅ Перевіряємо, чи існує текстура
         if (!this.scene.textures.exists(key)) {
-          console.warn(`⚠️ Текстура ${key} не знайдена для тайла ${tileId} на позиції (${x}, ${y})`);
+          const isCorner = tileConfig?.id?.includes('corner') || false;
+          const prefix = isCorner ? '❌ [CORNER MISSING]' : '⚠️';
+          console.warn(`${prefix} Текстура ${key} не знайдена для тайла ${tileId} на позиції (${x}, ${y})`);
           // Використовуємо fallback - кольоровий тайл
           const fallbackKey = `tile-${tileId}`;
           if (!this.scene.textures.exists(fallbackKey)) {
+            if (isCorner) {
+              console.error(`❌ [CORNER] Fallback ${fallbackKey} теж не знайдено!`);
+            }
             continue; // Пропускаємо, якщо немає fallback
           }
           key = fallbackKey;
@@ -150,13 +179,25 @@ export class TileRenderer {
         
         // ✅ DIRT тайли мають ромб ВНИЗУ (як об'єкти)!
         const isDirtTile = tileConfig?.dirtTilesetKey !== undefined;
+        // ✅ StoneWall (прямі та кутові) — "вертикальні" об'єкти
+        const isWallTile =
+          tileConfig?.type === "stonewall_n" ||
+          tileConfig?.type === "stonewall_e" ||
+          tileConfig?.type === "stonewall_s" ||
+          tileConfig?.type === "stonewall_w" ||
+          tileConfig?.id.startsWith("stonewall_corner_");
         
-        if (layerType === 'object' || isDirtTile) {
-          originY = 1; // ✅ Низ по центру (для об'єктів та DIRT!)
+        // ✅ Діагностика для кутів
+        if (tileConfig?.id.includes('corner')) {
+          console.log(`🔍 [CORNER DEBUG] ${tileId}: isWallTile=${isWallTile}, layerType=${layerType}, key=${key}`);
+        }
+        
+        if (layerType === 'object' || isDirtTile || isWallTile) {
+          originY = 1; // ✅ Низ по центру (для об'єктів, стін та DIRT!)
         }
         
         const spr = this.scene.add.image(sx, sy, key).setOrigin(originX, originY);
-
+        
         // ✅ Застосовуємо масштабування з конфігурації
         const scale = tileConfig?.scale ?? 1;
         const scaleX = typeof scale === "number" ? scale : scale.x;
@@ -164,8 +205,57 @@ export class TileRenderer {
 
         // ✅ Різна логіка для різних типів тайлів
         if (layerType === 'object') {
-          // ✅ Об'єкти (barrel): оригінальний розмір з scale
+          // ✅ Об'єкти (barrel, стіни та інше): оригінальний розмір з scale
+          // 👇 ДОДАТКОВО: Для стін логуватимемо «рекомендований» scale на основі сітки
+          if (isWallTile && spr.texture) {
+            const texture = spr.texture;
+            const originalWidth = texture.source[0].width;
+            const originalHeight = texture.source[0].height;
+
+            const targetWidth = W * gridW;
+            // Висота стіни не прив'язана до висоти floor-тайлів — зберігаємо пропорції
+            const fitScaleX = originalWidth > 0 ? targetWidth / originalWidth : 1;
+            const fitScaleY = fitScaleX; // ✅ Використовуємо той самий scale по Y
+
+            const isCorner = tileConfig?.id?.includes('corner') || false;
+            const prefix = isCorner ? '🏛️ [CORNER]' : '🧱 [WALL DEBUG]';
+            
+            console.log(
+              `${prefix} ${tileId}: img=${originalWidth}x${originalHeight}, ` +
+              `grid=${gridW}x${gridH}, tile=${W}x${H}, ` +
+              `cfgScale=(${scaleX.toFixed(2)}, ${scaleY.toFixed(2)}), ` +
+              `fitScale≈(${fitScaleX.toFixed(2)}, ${fitScaleY.toFixed(2)}), ` +
+              `offset=(${tileConfig?.offset?.x ?? 0}, ${tileConfig?.offset?.y ?? 0})`
+            );
+          }
+
           spr.setScale(scaleX, scaleY);
+          
+          // ✅ Ромбоподібна hit area для стін (ізометрична основа)
+          if (isWallTile) {
+            // Розраховуємо розміри ромба на основі gridSize та scale
+            const isoWidth = W * gridW * scaleX;   // Ширина ромба в пікселях
+            const isoHeight = H * gridH * scaleY;  // Висота ромба в пікселях
+            
+            // Ромбоподібна hit area (основа стіни)
+            // Вершини ромба відносно origin (0.5, 1) - низ по центру
+            // Для ізометричного ромба: верх, право, низ, ліво
+            const wallBase = new Phaser.Geom.Polygon([
+              0, -isoHeight,                       // верх (центр, вище origin)
+              isoWidth / 2, -isoHeight / 2,       // право
+              0, 0,                                // низ (центр, на рівні origin)
+              -isoWidth / 2, -isoHeight / 2        // ліво
+            ]);
+            
+            spr.setInteractive(wallBase, Phaser.Geom.Polygon.Contains);
+            
+            const isCorner = tileConfig?.id?.includes('corner') || false;
+            const prefix = isCorner ? '🏛️' : '🧱';
+            console.log(
+              `${prefix} [HIT AREA] ${tileId}: Ромбоподібна колізія ` +
+              `${isoWidth.toFixed(0)}×${isoHeight.toFixed(0)} (grid=${gridW}×${gridH}, scale=${scaleX.toFixed(2)})`
+            );
+          }
         } else if (isDirtTile) {
           // ✅ DIRT тайли: автоматичний scale під розмір тайла (82x42)
           const texture = spr.texture;
@@ -181,7 +271,8 @@ export class TileRenderer {
           
           spr.setScale(finalScale * scaleX, finalScale * scaleY);
           
-          console.log(`🟤 DIRT scale: ${originalWidth}x${originalHeight} → scale=${finalScale.toFixed(2)} → ${(originalWidth * finalScale).toFixed(0)}x${(originalHeight * finalScale).toFixed(0)}`);
+          // ✅ Лог тільки для першого тайла (щоб не спамити консоль)
+          // console.log(`🟤 DIRT scale: ${originalWidth}x${originalHeight} → scale=${finalScale.toFixed(2)} → ${(originalWidth * finalScale).toFixed(0)}x${(originalHeight * finalScale).toFixed(0)}`);
         } else {
           // ✅ Для підлоги (forest, floor): розтягуємо на весь простір тайла
           const displayWidth = W * gridW * scaleX;
@@ -202,6 +293,49 @@ export class TileRenderer {
         // ✅ Встановлюємо фільтр для уникнення артефактів при масштабуванні
         if (spr.texture) {
           spr.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+        }
+
+        // ✅ Корекція depth для стін (ізометрична глибина)
+        // Для стін 2×2 використовуємо центр grid для правильного порядку малювання
+        if (isWallTile) {
+          // Використовуємо центр grid для depth (більш точний для стін 2×2)
+          const centerX = x + (gridW - 1) / 2;
+          const centerY = y + (gridH - 1) / 2;
+          
+          // Depth = сума координат (чим більше — тим ближче до камери)
+          // Множимо на 100 для точності та додаємо offset для шару
+          const layerDepth = layerType === 'object' ? 10 : 0; // object layer має depth 10
+          const baseDepth = (centerX + centerY) * 100;
+          
+          // Додати невеликий offset для висоти стіни (щоб стіни малювалися над землею)
+          const heightOffset = 5; // стіни трохи вище за землю
+          
+          // ✅ Визначаємо offset залежно від напрямку стіни (ізометрія)
+          // В ізометричній проєкції (камера зверху-ліворуч):
+          // - East (E): вправо-вниз → ближче до камери → offset=100
+          // - South (S): вліво-вниз → найближче до камери → offset=300
+          // - North/West: базова глибина → offset=0
+          let depthOffset = 0;
+          
+          if (tileId.includes('_e') || tileId.includes('corner_e')) {
+            depthOffset = 100; // East: ближче до камери (вправо-вниз)
+          } else if (tileId.includes('_s') || tileId.includes('corner_s')) {
+            depthOffset = 300; // South: НАБАГАТО ближче до камери (вліво-вниз)
+          } else if (tileId.includes('_n') || tileId.includes('_w') || 
+                     tileId.includes('corner_n') || tileId.includes('corner_w')) {
+            depthOffset = 0; // North/West: базова глибина
+          }
+          
+          const finalDepth = baseDepth + layerDepth + heightOffset + depthOffset;
+          spr.setDepth(finalDepth);
+          
+          const isCorner = tileConfig?.id?.includes('corner') || false;
+          const prefix = isCorner ? '🏛️' : '🧱';
+          console.log(
+            `${prefix} [DEPTH FIX] ${tileId} at (${x},${y}), ` +
+            `grid=${gridW}×${gridH}, center=(${centerX.toFixed(1)},${centerY.toFixed(1)}), ` +
+            `depth=${finalDepth} (offset=${depthOffset})`
+          );
         }
 
         targetContainer.add(spr); // ✅ Додаємо до правильного контейнера (floor або object)

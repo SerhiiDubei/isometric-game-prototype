@@ -60,6 +60,20 @@ const CHARACTER_CONFIGS: Record<string, CharacterConfig> = {
     // ✅ ПРАВИЛЬНИЙ ПОРЯДОК після перейменування папок
     directions: ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"],
   },
+  islamicLeader: {
+    key: "islamic-leader",
+    frameW: 128,
+    frameH: 128,
+    walkFrameCount: 6,   // 6 кадрів walk анімації
+    idleFrameCount: 4,   // 4 кадри idle анімації
+    runFrameCount: 8,    // 8 кадрів run анімації
+    // ⚠️ НЕМАЄ інших анімацій (turn, cast, kick, melee, etc.)
+    baseScale: 1.5,      // Базовий розмір
+    visualSize: 1.0,     // Такий же як warrior
+    animationSpeedMultiplier: ANIMATION_SPEED_CONSTANTS.WALK_ANIMATION_MULTIPLIER,  // ✅ 36 FPS (стандарт)
+    runSpeedMultiplier: 1.5,  // ✅ Біг в 1.5 рази швидше за ходьбу
+    directions: ["south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west"],
+  },
 };
 
 /**

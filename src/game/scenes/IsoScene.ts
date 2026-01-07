@@ -10,6 +10,7 @@ import { GAME } from "../config/config";
 import { TileEditor } from "../ui/TileEditor";
 import { ControlsHint } from "../ui/ControlsHint"; // ✅ UI підказка
 import { TILE_CONFIGS, TILES_BY_ID } from "../config/tiles";
+import { SPRITES } from "../assets/AssetManifest";
 import { preloadTinySwordsTilemaps, processTinySwordsTilemaps } from "../utils/tilemapLoader";
 
 export class IsoScene extends Phaser.Scene {
@@ -63,12 +64,16 @@ export class IsoScene extends Phaser.Scene {
     console.log('📥 Завантаження barrel текстури...');
     this.load.image('barrel', '/Isometric/barrel_W.png');
     
-    // ✅ Завантажуємо StoneWall текстури (всі орієнтації)
-    console.log('📥 Завантаження stonewall текстур (N, E, S, W)...');
+    // ✅ Завантажуємо StoneWall текстури (всі орієнтації + кути)
+    console.log('📥 Завантаження stonewall текстур (N, E, S, W + corners)...');
     this.load.image('stonewall_n', '/Isometric/stoneWall_N.png');
     this.load.image('stonewall_e', '/Isometric/stoneWall_E.png');
     this.load.image('stonewall_s', '/Isometric/stoneWall_S.png');
     this.load.image('stonewall_w', '/Isometric/stoneWall_W.png');
+    this.load.image('stonewall_corner_n', '/Isometric/stoneWallCorner_N.png');
+    this.load.image('stonewall_corner_e', '/Isometric/stoneWallCorner_E.png');
+    this.load.image('stonewall_corner_s', '/Isometric/stoneWallCorner_S.png');
+    this.load.image('stonewall_corner_w', '/Isometric/stoneWallCorner_W.png');
     
     const preloadEnd = performance.now();
     const preloadTime = (preloadEnd - preloadStart).toFixed(2);
@@ -126,15 +131,19 @@ export class IsoScene extends Phaser.Scene {
     }
     
     // ✅ Обробляємо StoneWall всі орієнтації (видаляємо темний фон)
-    console.log('\n🏰 ОБРОБКА STONEWALL (видалення темного фону, threshold=150):');
-    const stonewallKeys = ['stonewall_n', 'stonewall_e', 'stonewall_s', 'stonewall_w'];
+    console.log('\n🏰 ОБРОБКА STONEWALL (видалення чорного фону, threshold=10):');
+    const stonewallKeys = [
+      'stonewall_n', 'stonewall_e', 'stonewall_s', 'stonewall_w',
+      'stonewall_corner_n', 'stonewall_corner_e', 'stonewall_corner_s', 'stonewall_corner_w'
+    ];
     for (const key of stonewallKeys) {
       if (this.textures.exists(key)) {
         const texture = this.textures.get(key);
         console.log(`   🔄 ${key}: ${texture.source[0]?.width}x${texture.source[0]?.height}px - обробка...`);
-        this.makeDarkTransparent(key, 150);
+        // ✅ Використовуємо threshold=10 (як для Forests) - видаляємо тільки чорний фон
+        this.makeBlackTransparent(key);
       } else {
-        console.error(`   ❌ ${key} НЕ завантажено!`);
+        console.warn(`   ⚠️ ${key} НЕ завантажено (можливо, не використовується)`);
       }
     }
     
@@ -168,6 +177,10 @@ export class IsoScene extends Phaser.Scene {
       this.grid.generateQualityMap((tileId) => TILES_BY_ID.get(tileId));
       this.tiles.redraw();
     }
+    
+    // ✅ Автоматично розміщуємо тестові стіни для перевірки depth sorting
+    this.grid.placeTestWalls((tileId) => TILES_BY_ID.get(tileId));
+    this.tiles.redraw(); // Перемалюємо з новими стінами
 
     // ✅ Спавн персонажа
     this.player = new IsoCharacter(this, this.iso, "warrior", { x: 20 * 4, y: 25 * 4 });
@@ -216,6 +229,9 @@ export class IsoScene extends Phaser.Scene {
     const createTime = (createEnd - createStart).toFixed(2);
     console.log(`✅ [SCENE] Create completed in ${createTime}ms`);
     console.log(`🎮 [SCENE] 🎉 GAME READY! Total time: ${createTime}ms`);
+    
+    // ✅ ЛОГУВАННЯ ВСІХ РОЗМІРІВ ОБ'ЄКТІВ
+    this.logAllDimensions();
   }
 
   // ✅ ОБРІЗАЄМО текстуру до реального вмісту і вираховуємо правильний scale
@@ -494,6 +510,139 @@ export class IsoScene extends Phaser.Scene {
     this.infoText.setText(
       `Character: ${charName}\nC - switch character\n🏠 Explore 3 large houses with rooms!`
     );
+  }
+
+  // ✅ ЛОГУВАННЯ ВСІХ РОЗМІРІВ ОБ'ЄКТІВ
+  logAllDimensions() {
+    console.log('\n📐 ========================================');
+    console.log('📐 ВСІ РОЗМІРИ ОБ\'ЄКТІВ В ГРІ');
+    console.log('📐 ========================================\n');
+    
+    // ✅ 1. РОЗМІРИ ТАЙЛІВ (ІЗОМЕТРИЧНА СІТКА)
+    console.log('🔷 ІЗОМЕТРИЧНА СІТКА:');
+    console.log(`   tileW (ширина тайла): ${this.iso.tileW}px`);
+    console.log(`   tileH (висота тайла): ${this.iso.tileH}px`);
+    console.log(`   Розмір сітки: ${this.iso.cols}×${this.iso.rows} клітинок`);
+    console.log(`   Origin: (${this.iso.ox.toFixed(1)}, ${this.iso.oy.toFixed(1)})\n`);
+    
+    // ✅ 2. РОЗМІРИ WARRIOR (ГОЛОВНИЙ ГЕРОЙ)
+    const warriorConfig = SPRITES['warrior'];
+    const warriorSprite = this.player.sprite;
+    const warriorScale = warriorConfig.scale || warriorConfig.baseScale || 1;
+    const warriorDisplayWidth = warriorConfig.frameW * warriorScale;
+    const warriorDisplayHeight = warriorConfig.frameH * warriorScale;
+    
+    console.log('⚔️ WARRIOR (головний герой):');
+    console.log(`   Оригінальний спрайт: ${warriorConfig.frameW}×${warriorConfig.frameH}px`);
+    console.log(`   baseScale: ${warriorConfig.baseScale}`);
+    console.log(`   visualSize: ${warriorConfig.visualSize}`);
+    console.log(`   Фінальний scale: ${warriorScale.toFixed(2)}`);
+    console.log(`   Візуальний розмір: ${warriorDisplayWidth.toFixed(0)}×${warriorDisplayHeight.toFixed(0)}px`);
+    console.log(`   Origin: (${warriorSprite.originX}, ${warriorSprite.originY})`);
+    console.log(`   Позиція: (${warriorSprite.x.toFixed(1)}, ${warriorSprite.y.toFixed(1)})`);
+    console.log(`   Клітинка: (${this.player.cell.x}, ${this.player.cell.y})`);
+    console.log(`   moveSpeed: ${this.player.moveSpeed}px/s\n`);
+    
+    // ✅ 3. РОЗМІРИ СТІН
+    const wallConfig = TILES_BY_ID.get('stonewall_n');
+    if (wallConfig) {
+      const wallScale = typeof wallConfig.scale === 'number' 
+        ? wallConfig.scale 
+        : (wallConfig.scale?.x || 0.64);
+      const wallOffset = wallConfig.offset || { x: 0, y: 0 };
+      const wallGridSize = wallConfig.gridSize || { width: 1, height: 1 };
+      
+      console.log('🧱 СТІНИ (stonewall):');
+      console.log(`   Оригінальний спрайт: 256×512px`);
+      console.log(`   gridSize: ${wallGridSize.width}×${wallGridSize.height} клітинок`);
+      console.log(`   scale: ${typeof wallConfig.scale === 'number' ? wallConfig.scale : `(${wallConfig.scale?.x}, ${wallConfig.scale?.y})`}`);
+      console.log(`   offset: (${wallOffset.x}, ${wallOffset.y})px`);
+      console.log(`   Візуальний розмір: ${(256 * wallScale).toFixed(0)}×${(512 * wallScale).toFixed(0)}px`);
+      console.log(`   Займає клітинок: ${wallGridSize.width}×${wallGridSize.height}\n`);
+    }
+    
+    // ✅ 4. РОЗМІРИ КУТІВ СТІН
+    const cornerConfig = TILES_BY_ID.get('stonewall_corner_n');
+    if (cornerConfig) {
+      const cornerScale = typeof cornerConfig.scale === 'number' 
+        ? cornerConfig.scale 
+        : (cornerConfig.scale?.x || 0.64);
+      const cornerOffset = cornerConfig.offset || { x: 0, y: 0 };
+      const cornerGridSize = cornerConfig.gridSize || { width: 1, height: 1 };
+      
+      console.log('🏛️ КУТИ СТІН (stonewall_corner):');
+      console.log(`   Оригінальний спрайт: 256×512px`);
+      console.log(`   gridSize: ${cornerGridSize.width}×${cornerGridSize.height} клітинок`);
+      console.log(`   scale: ${typeof cornerConfig.scale === 'number' ? cornerConfig.scale : `(${cornerConfig.scale?.x}, ${cornerConfig.scale?.y})`}`);
+      console.log(`   offset: (${cornerOffset.x}, ${cornerOffset.y})px`);
+      console.log(`   Візуальний розмір: ${(256 * cornerScale).toFixed(0)}×${(512 * cornerScale).toFixed(0)}px\n`);
+    }
+    
+    // ✅ 5. РОЗМІРИ BARREL
+    const barrelConfig = TILES_BY_ID.get('barrel');
+    if (barrelConfig && this.textures.exists('barrel')) {
+      const barrelTexture = this.textures.get('barrel');
+      const barrelOriginalW = barrelTexture.source[0]?.width || 0;
+      const barrelOriginalH = barrelTexture.source[0]?.height || 0;
+      const barrelScale = typeof barrelConfig.scale === 'number' 
+        ? barrelConfig.scale 
+        : (barrelConfig.scale?.x || 0.8);
+      const barrelDisplayW = barrelOriginalW * barrelScale;
+      const barrelDisplayH = barrelOriginalH * barrelScale;
+      
+      console.log('🛢️ BARREL (бочка):');
+      console.log(`   Оригінальний спрайт: ${barrelOriginalW}×${barrelOriginalH}px`);
+      console.log(`   scale: ${barrelScale}`);
+      console.log(`   Візуальний розмір: ${barrelDisplayW.toFixed(0)}×${barrelDisplayH.toFixed(0)}px`);
+      console.log(`   gridSize: 1×1 клітинка\n`);
+    }
+    
+    // ✅ 6. РОЗМІРИ FOREST ТАЙЛІВ
+    if (this.textures.exists('forest_tile_00')) {
+      const forestTexture = this.textures.get('forest_tile_00');
+      const forestW = forestTexture.source[0]?.width || 0;
+      const forestH = forestTexture.source[0]?.height || 0;
+      
+      console.log('🌲 FOREST (ліс):');
+      console.log(`   Оригінальний спрайт: ${forestW}×${forestH}px`);
+      console.log(`   gridSize: 1×1 клітинка`);
+      console.log(`   Візуальний розмір: ${this.iso.tileW}×${this.iso.tileH}px (розтягнуто на весь тайл)\n`);
+    }
+    
+    // ✅ 7. РОЗМІРИ DIRT ТАЙЛІВ
+    if (this.textures.exists('dirt_tiles_key')) {
+      const dirtTexture = this.textures.get('dirt_tiles_key');
+      const dirtW = dirtTexture.source[0]?.width || 0;
+      const dirtH = dirtTexture.source[0]?.height || 0;
+      const dirtConfig = TILES_BY_ID.get('dirt_tiles');
+      const dirtScale = dirtConfig?.scale || 4;
+      const dirtOffset = dirtConfig?.offset || { x: 0, y: 0 };
+      
+      const dirtScaleNum = typeof dirtScale === 'number' ? dirtScale : (dirtScale?.x || 4);
+      console.log('🟤 DIRT (земля):');
+      console.log(`   Оригінальний спрайт: ${dirtW}×${dirtH}px`);
+      console.log(`   scale: ${dirtScaleNum}`);
+      console.log(`   offset: (${dirtOffset.x}, ${dirtOffset.y})px`);
+      console.log(`   Візуальний розмір: ${(dirtW * dirtScaleNum).toFixed(0)}×${(dirtH * dirtScaleNum).toFixed(0)}px`);
+      console.log(`   gridSize: 1×1 клітинка\n`);
+    }
+    
+    // ✅ 8. РОЗМІРИ HITBOX (якщо є)
+    console.log('🎯 HITBOX / COLLISION:');
+    console.log(`   Warrior: використовує клітинку сітки (${this.iso.tileW}×${this.iso.tileH}px)`);
+    console.log(`   Стіни: ромбоподібна hit area (${(this.iso.tileW * 2 * 0.64).toFixed(0)}×${(this.iso.tileH * 2 * 0.64).toFixed(0)}px)`);
+    console.log(`   Barrel: використовує клітинку сітки (${this.iso.tileW}×${this.iso.tileH}px)\n`);
+    
+    // ✅ 9. СПІВВІДНОШЕННЯ РОЗМІРІВ
+    console.log('📊 СПІВВІДНОШЕННЯ РОЗМІРІВ:');
+    const warriorToTileRatio = warriorDisplayHeight / this.iso.tileH;
+    const wallToTileRatio = (512 * 0.64) / this.iso.tileH;
+    console.log(`   Warrior висота / tileH: ${warriorToTileRatio.toFixed(2)}x`);
+    console.log(`   Стіна висота / tileH: ${wallToTileRatio.toFixed(2)}x`);
+    console.log(`   Warrior ширина / tileW: ${(warriorDisplayWidth / this.iso.tileW).toFixed(2)}x`);
+    console.log(`   Стіна ширина / tileW: ${((256 * 0.64) / this.iso.tileW).toFixed(2)}x\n`);
+    
+    console.log('📐 ========================================\n');
   }
 
   update() {

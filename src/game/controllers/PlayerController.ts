@@ -34,7 +34,7 @@ export class PlayerController {
   private rollKey!: Phaser.Input.Keyboard.Key;       // V - Roll
   private path: GridPoint[] = [];
   private tileEditor?: TileEditor; // ✅ Посилання на редактор для перевірки режиму редагування
-  private availableCharacters: SpriteId[] = ["hero", "cyberpunkMarsian", "warrior"];
+  private availableCharacters: SpriteId[] = ["hero", "cyberpunkMarsian", "warrior", "islamicLeader"];
   private currentCharIndex = 2; // ✅ Початковий індекс (warrior)
 
   public scene: Phaser.Scene;
@@ -140,6 +140,7 @@ export class PlayerController {
       'hero': 'Hero',
       'cyberpunkMarsian': 'Cyberpunk Marsian',
       'warrior': 'Warrior',
+      'islamicLeader': 'Islamic Leader',
     };
     
     console.log(`Switched to character: ${characterNames[newCharId] || newCharId}`);
@@ -174,16 +175,30 @@ export class PlayerController {
 
   /**
    * ✅ Допоміжний метод для обробки action клавіш
+   * Перевіряє чи персонаж має відповідну анімацію перед виконанням
    */
   private handleActionKey(
     key: Phaser.Input.Keyboard.Key,
-    action: () => void
+    action: () => void,
+    animationType?: string
   ): boolean {
     if (
       Phaser.Input.Keyboard.JustDown(key) &&
       !this.player.isTurning &&
       !this.player.isPerforming
     ) {
+      // ✅ Якщо вказаний тип анімації - перевіряємо чи персонаж її має
+      if (animationType) {
+        const spriteConfig = this.player.getSpriteConfig();
+        const frameCountKey = `${animationType}FrameCount` as keyof typeof spriteConfig;
+        
+        // Якщо у персонажа немає цієї анімації - ігноруємо
+        if (!(frameCountKey in spriteConfig) || !spriteConfig[frameCountKey]) {
+          console.log(`⚠️ [ACTION] ${animationType} animation not available for ${this.player.id}`);
+          return false;
+        }
+      }
+      
       this.stopMovement();
       action();
       return true;
@@ -204,20 +219,20 @@ export class PlayerController {
     }
     
     // ✅ Обробка action клавіш (всі виконуються ОДРАЗУ, НЕ переривається!)
-    if (this.handleActionKey(this.turnKey, () => this.player.playTurn())) return;
-    if (this.handleActionKey(this.castKey, () => this.player.playCast())) return;
-    if (this.handleActionKey(this.kickKey, () => this.player.playKick())) return;
-    if (this.handleActionKey(this.meleeKey, () => this.player.playMelee())) return;
+    if (this.handleActionKey(this.turnKey, () => this.player.playTurn(), 'turn')) return;
+    if (this.handleActionKey(this.castKey, () => this.player.playCast(), 'cast')) return;
+    if (this.handleActionKey(this.kickKey, () => this.player.playKick(), 'kick')) return;
+    if (this.handleActionKey(this.meleeKey, () => this.player.playMelee(), 'melee')) return;
     
     // ✅ Додаткові action клавіші
-    if (this.handleActionKey(this.dieKey, () => this.player.playDie())) return;
-    if (this.handleActionKey(this.damageKey, () => this.player.playDamage())) return;
-    if (this.handleActionKey(this.shieldKey, () => this.player.playShieldBlock())) return;
-    if (this.handleActionKey(this.melee2Key, () => this.player.playMelee2())) return;
-    if (this.handleActionKey(this.meleeSpinKey, () => this.player.playMeleeSpin())) return;
-    if (this.handleActionKey(this.special1Key, () => this.player.playSpecial1())) return;
-    if (this.handleActionKey(this.special2Key, () => this.player.playSpecial2())) return;
-    if (this.handleActionKey(this.rollKey, () => this.player.playRoll())) return;
+    if (this.handleActionKey(this.dieKey, () => this.player.playDie(), 'die')) return;
+    if (this.handleActionKey(this.damageKey, () => this.player.playDamage(), 'damage')) return;
+    if (this.handleActionKey(this.shieldKey, () => this.player.playShieldBlock(), 'shieldBlock')) return;
+    if (this.handleActionKey(this.melee2Key, () => this.player.playMelee2(), 'melee2')) return;
+    if (this.handleActionKey(this.meleeSpinKey, () => this.player.playMeleeSpin(), 'meleeSpin')) return;
+    if (this.handleActionKey(this.special1Key, () => this.player.playSpecial1(), 'special1')) return;
+    if (this.handleActionKey(this.special2Key, () => this.player.playSpecial2(), 'special2')) return;
+    if (this.handleActionKey(this.rollKey, () => this.player.playRoll(), 'roll')) return;
 
     // ✅ Обробка pathfinding (не під час action)
     if (!this.player.isMoving && !this.player.isPerforming && this.path.length) {

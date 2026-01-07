@@ -62,9 +62,23 @@ export class Grid {
     const idx = this.idx(p);
     if (objectId) {
       this.objectTypes.set(idx, objectId);
-      // Об'єкт може блокувати прохід
+      
+      // ✅ Об'єкт може блокувати прохід
+      // Для об'єктів з gridSize > 1×1 блокуємо ВСІ клітинки, які вони займають
+      const gridSize = objectConfig.gridSize || { width: 1, height: 1 };
+      const gridW = gridSize.width;
+      const gridH = gridSize.height;
+      
       if (!objectConfig.walkable) {
-        this.setBlocked(p, true);
+        // Блокуємо всі клітинки, які займає об'єкт
+        for (let dy = 0; dy < gridH; dy++) {
+          for (let dx = 0; dx < gridW; dx++) {
+            const cellP: GridPoint = { x: p.x + dx, y: p.y + dy };
+            if (this.inBounds(cellP)) {
+              this.setBlocked(cellP, true);
+            }
+          }
+        }
       }
     } else {
       this.objectTypes.delete(idx);
@@ -120,6 +134,45 @@ export class Grid {
   setDemoWalls() {
     for (let x = 9; x < 16; x++) this.setBlocked({ x, y: 6 }, true);
     for (let y = 7; y < 10; y++) this.setBlocked({ x: 15, y }, true);
+  }
+
+  // ✅ Автоматичне розміщення тестових стін для перевірки depth sorting
+  placeTestWalls(getTileConfig: (tileId: string) => TileConfig | undefined) {
+    console.log('🧱 [TEST] Розміщення тестових стін...');
+    
+    // Тестові позиції для перевірки depth sorting
+    const testWalls = [
+      // Верхні стіни (для перевірки перекриття)
+      { x: 101, y: 120, id: 'stonewall_n' }, // Верх-ліва
+      { x: 109, y: 120, id: 'stonewall_e' }, // Верх-права
+      { x: 105, y: 120, id: 'stonewall_corner_n' }, // Кут між ними
+      
+      // Нижні стіни (для порівняння)
+      { x: 101, y: 130, id: 'stonewall_s' }, // Низ-ліва
+      { x: 109, y: 130, id: 'stonewall_w' }, // Низ-права
+      
+      // Додаткові кути для тесту
+      { x: 101, y: 125, id: 'stonewall_corner_e' },
+      { x: 109, y: 125, id: 'stonewall_corner_s' },
+      { x: 105, y: 130, id: 'stonewall_corner_w' },
+    ];
+
+    let placedCount = 0;
+    for (const wall of testWalls) {
+      const p: GridPoint = { x: wall.x, y: wall.y };
+      if (this.inBounds(p)) {
+        const wallCfg = getTileConfig(wall.id);
+        if (wallCfg) {
+          this.setObjectType(p, wall.id, wallCfg);
+          placedCount++;
+          console.log(`   ✅ ${wall.id} at (${wall.x}, ${wall.y})`);
+        } else {
+          console.warn(`   ⚠️ Конфіг для ${wall.id} не знайдено!`);
+        }
+      }
+    }
+    
+    console.log(`🧱 [TEST] Розміщено ${placedCount} тестових стін!`);
   }
 
   // ✅ Генерувати якісну багатошарову карту з різними зонами
@@ -229,15 +282,31 @@ export class Grid {
       console.log(`✅ Бочки створено (${barrelPositions.length} штук)!`);
     }
 
-    // === ШАР 6: КІМНАТА З ПРОХОДОМ ===
-    this.generateRoom(
-      { x: 100, y: 120 }, // Позиція кімнати
-      { width: 10, height: 8 }, // Розмір
-      { x: 104, y: 120 }, // Прохід (двері) - північ, по центру
+    // === ШАР 6: КІМНАТА 1 - ВЕРТИКАЛЬНА ПРЯМОКУТНА З КУТАМИ ===
+    this.generateRoomWithCorners(
+      { x: 100, y: 130 }, // Позиція першої кімнати
+      { width: 10, height: 16 }, // Висока прямокутна форма (вертикальна)
+      { x: 104, y: 130 }, // Прохід (двері) - північ, по центру
       getTileConfig
     );
 
-    console.log('✅ Карта згенерована (floor + water + forest + DIRT + barrel + кімната з проходом)!');
+    // === ШАР 7: КІМНАТА 2 - ГОРИЗОНТАЛЬНА ПРЯМОКУТНА З КУТАМИ ===
+    this.generateRoomWithCorners(
+      { x: 120, y: 100 }, // Позиція другої кімнати
+      { width: 16, height: 10 }, // Широка прямокутна форма (горизонтальна)
+      { x: 127, y: 100 }, // Прохід (двері) - північ, по центру
+      getTileConfig
+    );
+
+    // === ШАР 8: КІМНАТА 3 - КВАДРАТНА З КУТАМИ ===
+    this.generateRoomWithCorners(
+      { x: 140, y: 120 }, // Позиція третьої кімнати
+      { width: 12, height: 12 }, // Квадратна форма
+      { x: 145, y: 120 }, // Прохід (двері) - північ, по центру
+      getTileConfig
+    );
+
+    console.log('✅ Карта згенерована (floor + water + forest + DIRT + barrel + 3 кімнати різної форми з проходами)!');
   }
 
   // ✅ Генерує лісову зону з різними деревами (для майбутнього використання)
@@ -448,6 +517,92 @@ export class Grid {
         }
       }
     }
+  }
+
+  // ✅ Генерує кімнату з стінами ТА КУТАМИ (з правильними орієнтаціями!)
+  generateRoomWithCorners(
+    topLeft: GridPoint,
+    size: { width: number; height: number },
+    doorway: GridPoint | null, // ✅ Позиція проходу (двері), null = без проходу
+    getTileConfig: (tileId: string) => TileConfig | undefined
+  ) {
+    console.log(`🏰 [ROOM] Створення кімнати з кутами: позиція (${topLeft.x}, ${topLeft.y}), розмір ${size.width}×${size.height}`);
+    
+    const topRight = { x: topLeft.x + size.width - 1, y: topLeft.y };
+    const bottomLeft = { x: topLeft.x, y: topLeft.y + size.height - 1 };
+    const bottomRight = { x: topLeft.x + size.width - 1, y: topLeft.y + size.height - 1 };
+    
+    // ✅ 1. КУТИ (спочатку кути, щоб вони були під прямими стінами)
+    const corners = [
+      { pos: topLeft, id: 'stonewall_corner_n' },      // Верхній лівий кут (північний)
+      { pos: topRight, id: 'stonewall_corner_e' },    // Верхній правий кут (східний)
+      { pos: bottomLeft, id: 'stonewall_corner_w' },  // Нижній лівий кут (західний)
+      { pos: bottomRight, id: 'stonewall_corner_s' }, // Нижній правий кут (південний)
+    ];
+    
+    for (const corner of corners) {
+      // Перевіряємо, чи це не позиція проходу
+      if (doorway && corner.pos.x === doorway.x && corner.pos.y === doorway.y) {
+        continue;
+      }
+      
+      if (this.inBounds(corner.pos)) {
+        const cornerCfg = getTileConfig(corner.id);
+        if (cornerCfg) {
+          this.setObjectType(corner.pos, corner.id, cornerCfg);
+          console.log(`   ✅ Кут ${corner.id} at (${corner.pos.x}, ${corner.pos.y})`);
+        }
+      }
+    }
+    
+    // ✅ 2. ПРЯМІ СТІНИ (після кутів, щоб вони були зверху)
+    for (let x = topLeft.x; x < topLeft.x + size.width; x++) {
+      for (let y = topLeft.y; y < topLeft.y + size.height; y++) {
+        const p = { x, y };
+        if (!this.inBounds(p)) continue;
+
+        // ✅ Пропускаємо кути (вже розміщені)
+        if (
+          (p.x === topLeft.x && p.y === topLeft.y) ||
+          (p.x === topRight.x && p.y === topRight.y) ||
+          (p.x === bottomLeft.x && p.y === bottomLeft.y) ||
+          (p.x === bottomRight.x && p.y === bottomRight.y)
+        ) {
+          continue;
+        }
+
+        // ✅ Якщо це позиція проходу (дверей) - пропускаємо
+        if (doorway && p.x === doorway.x && p.y === doorway.y) {
+          continue;
+        }
+
+        let wallId: string | null = null;
+
+        // Визначаємо орієнтацію стіни залежно від позиції
+        if (y === topLeft.y && x !== topLeft.x && x !== topLeft.x + size.width - 1) {
+          // Верхня стіна (горизонтальна) - North
+          wallId = 'stonewall_n';
+        } else if (y === topLeft.y + size.height - 1 && x !== topLeft.x && x !== topLeft.x + size.width - 1) {
+          // Нижня стіна (горизонтальна) - South
+          wallId = 'stonewall_s';
+        } else if (x === topLeft.x && y !== topLeft.y && y !== topLeft.y + size.height - 1) {
+          // Ліва стіна (вертикальна) - West
+          wallId = 'stonewall_w';
+        } else if (x === topLeft.x + size.width - 1 && y !== topLeft.y && y !== topLeft.y + size.height - 1) {
+          // Права стіна (вертикальна) - East
+          wallId = 'stonewall_e';
+        }
+
+        if (wallId) {
+          const wallCfg = getTileConfig(wallId);
+          if (wallCfg) {
+            this.setObjectType(p, wallId, wallCfg);
+          }
+        }
+      }
+    }
+    
+    console.log(`🏰 [ROOM] Кімната створена!`);
   }
 
   // ✅ Генерує дорогу

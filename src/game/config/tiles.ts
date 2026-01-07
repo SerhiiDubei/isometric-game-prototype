@@ -14,6 +14,8 @@ export type TileType =
   | "stonewall_s"
   | "stonewall_w";
 
+import { GAME } from "./config";
+
 export interface TileConfig {
   id: string;
   type: TileType;
@@ -38,6 +40,27 @@ export interface TileConfig {
   // ✅ Підтримка DIRT тайлів (ТАК САМО ЯК FOREST!)
   dirtTilesetKey?: string; // Ключ DIRT тайла (наприклад: "dirt_tiles_key")
 }
+
+// ✅ Базові параметри для стін Kenney (stoneWall*.png)
+const WALL_SPRITE_SIZE = { width: 256, height: 512 } as const;
+const ISO_TILE_SIZE = { width: GAME.tileW, height: GAME.tileH } as const;
+
+function wallBaseScale(gridWidth: number, gridHeight: number) {
+  const baseScaleX =
+    (ISO_TILE_SIZE.width * gridWidth) / WALL_SPRITE_SIZE.width;
+  const baseScaleY = baseScaleX; // Зберігаємо пропорції
+  return { x: baseScaleX, y: baseScaleY };
+}
+
+function wallBaseOffset(gridWidth: number, gridHeight: number) {
+  const offsetX = 0;
+  const offsetY = (ISO_TILE_SIZE.height * gridHeight) / 2;
+  return { x: offsetX, y: offsetY };
+}
+
+// ✅ Спільні параметри для всіх 2×2 стін та кутів
+const TWO_BY_TWO_WALL_SCALE = wallBaseScale(2, 2);   // ≈ { x: 0.64, y: 0.64 }
+const TWO_BY_TWO_WALL_OFFSET = wallBaseOffset(2, 2); // { x: 0, y: 42 }
 
 export const TILE_CONFIGS: TileConfig[] = [
   {
@@ -114,9 +137,9 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x808080,
     name: "Стіна (північ)",
     directTextureKey: "stonewall_n",
-    scale: 0.7, // ✅ Ще × 2 (0.35 × 2 = 0.7) - займає 2 клітинки
-    offset: { x: 0, y: -36 }, // ✅ Offset також × 2
-    gridSize: { width: 2, height: 2 }, // ✅ Займає 2×2 клітинки
+    gridSize: { width: 2, height: 2 }, // Займає 2×2 клітинки
+    scale: TWO_BY_TWO_WALL_SCALE,      // Уніфікований scale для всіх стін
+    offset: TWO_BY_TWO_WALL_OFFSET,    // Низ стіни на базовій лінії ромба
   },
   {
     id: "stonewall_e",
@@ -125,9 +148,9 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x888888,
     name: "Стіна (схід)",
     directTextureKey: "stonewall_e",
-    scale: 0.72, // ✅ Ще × 2 (0.36 × 2 = 0.72) - займає 2 клітинки
-    offset: { x: 32, y: 0 }, // ✅ Offset також × 2
-    gridSize: { width: 2, height: 2 }, // ✅ Займає 2×2 клітинки
+    gridSize: { width: 2, height: 2 },
+    scale: TWO_BY_TWO_WALL_SCALE,
+    offset: TWO_BY_TWO_WALL_OFFSET,
   },
   {
     id: "stonewall_s",
@@ -136,9 +159,9 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x909090,
     name: "Стіна (південь)",
     directTextureKey: "stonewall_s",
-    scale: 0.7, // ✅ Ще × 2 (0.35 × 2 = 0.7) - займає 2 клітинки
-    offset: { x: 32, y: -36 }, // ✅ Offset також × 2
-    gridSize: { width: 2, height: 2 }, // ✅ Займає 2×2 клітинки
+    gridSize: { width: 2, height: 2 },
+    scale: TWO_BY_TWO_WALL_SCALE,
+    offset: TWO_BY_TWO_WALL_OFFSET,
   },
   {
     id: "stonewall_w",
@@ -147,9 +170,54 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x989898,
     name: "Стіна (захід)",
     directTextureKey: "stonewall_w",
-    scale: 0.72, // ✅ Ще × 2 (0.36 × 2 = 0.72) - займає 2 клітинки
-    offset: { x: 36, y: 0 }, // ✅ Offset також × 2
-    gridSize: { width: 2, height: 2 }, // ✅ Займає 2×2 клітинки
+    gridSize: { width: 2, height: 2 },
+    scale: TWO_BY_TWO_WALL_SCALE,
+    offset: TWO_BY_TWO_WALL_OFFSET,
+  },
+  // ✅ Кутові стіни (Corner) з такими ж параметрами, як і прямі
+  {
+    id: "stonewall_corner_n",
+    type: "stonewall_n",
+    walkable: false,
+    color: 0xcccccc,
+    name: "Стіна (кут північ)",
+    directTextureKey: "stonewall_corner_n",
+    gridSize: { width: 2, height: 2 },
+    scale: TWO_BY_TWO_WALL_SCALE,
+    offset: TWO_BY_TWO_WALL_OFFSET,
+  },
+  {
+    id: "stonewall_corner_e",
+    type: "stonewall_e",
+    walkable: false,
+    color: 0xcccccc,
+    name: "Стіна (кут схід)",
+    directTextureKey: "stonewall_corner_e",
+    gridSize: { width: 2, height: 2 },
+    scale: TWO_BY_TWO_WALL_SCALE,
+    offset: TWO_BY_TWO_WALL_OFFSET,
+  },
+  {
+    id: "stonewall_corner_s",
+    type: "stonewall_s",
+    walkable: false,
+    color: 0xcccccc,
+    name: "Стіна (кут південь)",
+    directTextureKey: "stonewall_corner_s",
+    gridSize: { width: 2, height: 2 },
+    scale: TWO_BY_TWO_WALL_SCALE,
+    offset: TWO_BY_TWO_WALL_OFFSET,
+  },
+  {
+    id: "stonewall_corner_w",
+    type: "stonewall_w",
+    walkable: false,
+    color: 0xcccccc,
+    name: "Стіна (кут захід)",
+    directTextureKey: "stonewall_corner_w",
+    gridSize: { width: 2, height: 2 },
+    scale: TWO_BY_TWO_WALL_SCALE,
+    offset: TWO_BY_TWO_WALL_OFFSET,
   },
 ];
 

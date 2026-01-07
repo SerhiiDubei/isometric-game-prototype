@@ -552,6 +552,13 @@ export class IsoCharacter {
     return this.performing;
   }
 
+  /**
+   * ✅ Отримати конфігурацію спрайту персонажа
+   */
+  getSpriteConfig() {
+    return SPRITES[this.id];
+  }
+
   destroy() {
     this.sprite.destroy();
   }
