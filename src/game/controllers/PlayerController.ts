@@ -8,6 +8,7 @@ import { clamp } from "../config/config";
 import { astar } from "../utils/astar";
 import type { TileEditor } from "../ui/TileEditor";
 import type { SpriteId } from "../assets/AssetManifest";
+import type { TileRenderer } from "../world/TileRenderer";
 
 export class PlayerController {
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -34,6 +35,7 @@ export class PlayerController {
   private rollKey!: Phaser.Input.Keyboard.Key;       // V - Roll
   private path: GridPoint[] = [];
   private tileEditor?: TileEditor; // ✅ Посилання на редактор для перевірки режиму редагування
+  private tileRenderer?: TileRenderer; // ✅ Посилання на TileRenderer для доступу до collision grid
   private availableCharacters: SpriteId[] = ["hero", "cyberpunkMarsian", "warrior", "islamicLeader"];
   private currentCharIndex = 2; // ✅ Початковий індекс (warrior)
 
@@ -47,13 +49,15 @@ export class PlayerController {
     grid: Grid,
     iso: IsoTransform,
     player: IsoCharacter,
-    tileEditor?: TileEditor
+    tileEditor?: TileEditor,
+    tileRenderer?: TileRenderer // ✅ Опціональний доступ до TileRenderer для collision grid
   ) {
     this.scene = scene;
     this.grid = grid;
     this.iso = iso;
     this.player = player;
     this.tileEditor = tileEditor;
+    this.tileRenderer = tileRenderer;
 
     this.cursors = scene.input.keyboard!.createCursorKeys();
     this.wasd = scene.input.keyboard!.addKeys("W,A,S,D") as {
@@ -279,7 +283,19 @@ export class PlayerController {
       y: clamp(this.player.cell.y + Math.sign(dy), 0, this.grid.rows - 1),
     };
 
-    if (this.grid.isBlocked(target)) return;
+    // ✅ Перевірка колізії через Grid (основна перевірка)
+    if (this.grid.isBlocked(target)) {
+      // ✅ Додаткова перевірка через collision grid для логування
+      if (this.tileRenderer?.collisionGrid) {
+        this.tileRenderer.collisionGrid.canMoveTo(target.x, target.y);
+      }
+      return;
+    }
+    
+    // ✅ Додаткова перевірка через collision grid для логування (якщо клітинка не заблокована)
+    if (this.tileRenderer?.collisionGrid) {
+      this.tileRenderer.collisionGrid.canMoveTo(target.x, target.y);
+    }
     this.path = [];
 
     // ✅ Перевіряємо, чи клавіша все ще натиснута - якщо так, це не останній рух

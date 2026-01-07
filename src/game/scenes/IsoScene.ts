@@ -194,7 +194,8 @@ export class IsoScene extends Phaser.Scene {
       this.grid,
       this.iso,
       this.player,
-      this.tileEditor // ✅ Передаємо редактор для перевірки режиму
+      this.tileEditor, // ✅ Передаємо редактор для перевірки режиму
+      this.tiles // ✅ Передаємо TileRenderer для доступу до collision grid
     );
 
     // ✅ Створюємо інформаційний текст

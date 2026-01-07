@@ -5,6 +5,7 @@ import type { IsoTransform } from "../iso/isoTransofrm";
 import type { GridPoint } from "../types/grid-types";
 import { TILE_CONFIGS } from "../config/tiles";
 import { getTilemapTileKey } from "../utils/tilemapLoader";
+import { CollisionGrid } from "./CollisionGrid";
 
 export class TileRenderer {
   private floorLayer!: Phaser.GameObjects.Container; // ✅ ШАР 1: Підлога (depth: 0)
@@ -14,11 +15,14 @@ export class TileRenderer {
   public scene: Phaser.Scene;
   public grid: Grid;
   public iso: IsoTransform;
+  public collisionGrid: CollisionGrid; // ✅ Collision grid для перевірки колізій
 
   constructor(scene: Phaser.Scene, grid: Grid, iso: IsoTransform) {
     this.scene = scene;
     this.grid = grid;
     this.iso = iso;
+    // ✅ Ініціалізуємо collision grid
+    this.collisionGrid = new CollisionGrid(grid.cols, grid.rows);
   }
 
   create() {
@@ -38,6 +42,9 @@ export class TileRenderer {
     this.floorLayer.removeAll(true);
     this.objectLayer.removeAll(true);
     // ✅ characterLayer НЕ очищаємо - там герой!
+    
+    // ✅ Очищаємо collision grid перед регенерацією
+    this.collisionGrid.clear();
     
     // ✅ Діагностика: виводимо конфігурацію стін і кутів
     const walls = TILE_CONFIGS.filter((t) => 
@@ -267,6 +274,9 @@ export class TileRenderer {
             ]);
             
             spr.setInteractive(wallBase, Phaser.Geom.Polygon.Contains);
+            
+            // ✅ РЕЄСТРАЦІЯ В COLLISION GRID
+            this.collisionGrid.addOccupant(x, y, gridW, gridH, tileId);
             
             const isCorner = tileConfig?.id?.includes('corner') || false;
             const prefix = isCorner ? '🏛️' : '🧱';
