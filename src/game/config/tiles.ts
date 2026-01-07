@@ -45,10 +45,10 @@ export interface TileConfig {
 const WALL_SPRITE_SIZE = { width: 256, height: 512 } as const;
 const ISO_TILE_SIZE = { width: GAME.tileW, height: GAME.tileH } as const;
 
-function wallBaseScale(gridWidth: number, gridHeight: number) {
+function wallBaseScale(gridWidth: number, _gridHeight: number) {
   const baseScaleX =
     (ISO_TILE_SIZE.width * gridWidth) / WALL_SPRITE_SIZE.width;
-  const baseScaleY = baseScaleX; // Зберігаємо пропорції
+  const baseScaleY = baseScaleX; // Зберігаємо пропорції (_gridHeight не використовується, але залишаємо для консистентності)
   return { x: baseScaleX, y: baseScaleY };
 }
 
@@ -58,7 +58,11 @@ function wallBaseOffset(gridWidth: number, gridHeight: number) {
   return { x: offsetX, y: offsetY };
 }
 
-// ✅ Спільні параметри для всіх 2×2 стін та кутів
+// ✅ Спільні параметри для прямих стін (2×1 - прямокутник)
+const TWO_BY_ONE_WALL_SCALE = wallBaseScale(2, 1);   // ≈ { x: 0.64, y: 0.64 }
+const TWO_BY_ONE_WALL_OFFSET = wallBaseOffset(2, 1); // { x: 0, y: 21 }
+
+// ✅ Спільні параметри для кутових стін (2×2 - квадрат)
 const TWO_BY_TWO_WALL_SCALE = wallBaseScale(2, 2);   // ≈ { x: 0.64, y: 0.64 }
 const TWO_BY_TWO_WALL_OFFSET = wallBaseOffset(2, 2); // { x: 0, y: 42 }
 
@@ -137,9 +141,9 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x808080,
     name: "Стіна (північ)",
     directTextureKey: "stonewall_n",
-    gridSize: { width: 2, height: 2 }, // Займає 2×2 клітинки
-    scale: TWO_BY_TWO_WALL_SCALE,      // Уніфікований scale для всіх стін
-    offset: TWO_BY_TWO_WALL_OFFSET,    // Низ стіни на базовій лінії ромба
+    gridSize: { width: 2, height: 1 }, // Займає 2×1 клітинки (прямокутник)
+    scale: TWO_BY_ONE_WALL_SCALE,      // Scale для 2×1
+    offset: TWO_BY_ONE_WALL_OFFSET,    // Offset для 2×1
   },
   {
     id: "stonewall_e",
@@ -148,9 +152,9 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x888888,
     name: "Стіна (схід)",
     directTextureKey: "stonewall_e",
-    gridSize: { width: 2, height: 2 },
-    scale: TWO_BY_TWO_WALL_SCALE,
-    offset: TWO_BY_TWO_WALL_OFFSET,
+    gridSize: { width: 2, height: 1 }, // Займає 2×1 клітинки (прямокутник)
+    scale: TWO_BY_ONE_WALL_SCALE,
+    offset: TWO_BY_ONE_WALL_OFFSET,
   },
   {
     id: "stonewall_s",
@@ -159,9 +163,9 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x909090,
     name: "Стіна (південь)",
     directTextureKey: "stonewall_s",
-    gridSize: { width: 2, height: 2 },
-    scale: TWO_BY_TWO_WALL_SCALE,
-    offset: TWO_BY_TWO_WALL_OFFSET,
+    gridSize: { width: 2, height: 1 }, // Займає 2×1 клітинки (прямокутник)
+    scale: TWO_BY_ONE_WALL_SCALE,
+    offset: TWO_BY_ONE_WALL_OFFSET,
   },
   {
     id: "stonewall_w",
@@ -170,9 +174,9 @@ export const TILE_CONFIGS: TileConfig[] = [
     color: 0x989898,
     name: "Стіна (захід)",
     directTextureKey: "stonewall_w",
-    gridSize: { width: 2, height: 2 },
-    scale: TWO_BY_TWO_WALL_SCALE,
-    offset: TWO_BY_TWO_WALL_OFFSET,
+    gridSize: { width: 2, height: 1 }, // Займає 2×1 клітинки (прямокутник)
+    scale: TWO_BY_ONE_WALL_SCALE,
+    offset: TWO_BY_ONE_WALL_OFFSET,
   },
   // ✅ Кутові стіни (Corner) з такими ж параметрами, як і прямі
   {
