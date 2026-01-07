@@ -155,7 +155,15 @@ export class TileRenderer {
         const centerX = x + (gridW - 1) / 2;
         const centerY = y + (gridH - 1) / 2;
         const centerPoint: GridPoint = { x: centerX, y: centerY };
-        const { x: sx, y: sy } = this.iso.cellToScreen(centerPoint);
+        let { x: sx, y: sy } = this.iso.cellToScreen(centerPoint);
+        
+        // ✅ Якщо це South-стіна, зсуваємо її вниз на 1 клітинку (42px)
+        if (tileId.includes('_s') || tileId.includes('corner_s')) {
+          const SOUTH_OFFSET = 42; // фіксована константа (1 клітинка)
+          sx -= SOUTH_OFFSET; // вліво
+          sy += SOUTH_OFFSET; // вниз
+          console.log(`🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): shifted by (-${SOUTH_OFFSET}, +${SOUTH_OFFSET})`);
+        }
 
         // ✅ Перевіряємо, чи існує текстура
         if (!this.scene.textures.exists(key)) {
