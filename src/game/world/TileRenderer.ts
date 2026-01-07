@@ -237,27 +237,31 @@ export class TileRenderer {
 
           spr.setScale(scaleX, scaleY);
           
-          // ✅ Застосовуємо offset з конфігу ПЕРЕД створенням hit area (для синхронізації)
-          if (tileConfig?.offset) {
-            spr.x += tileConfig.offset.x;
-            spr.y += tileConfig.offset.y;
+          // ✅ Отримуємо offset (перед застосуванням, для використання в hit area)
+          const offsetX = tileConfig?.offset?.x ?? 0;
+          const offsetY = tileConfig?.offset?.y ?? 0;
+          
+          // ✅ Застосовуємо offset ПЕРЕД створенням hit area
+          if (offsetX !== 0 || offsetY !== 0) {
+            spr.x += offsetX;
+            spr.y += offsetY;
           }
           
           // ✅ Ромбоподібна hit area для стін (ізометрична основа)
-          // Створюється ПІСЛЯ застосування всіх offsets, щоб бути синхронізованою з позицією спрайту
+          // Створюється ПІСЛЯ застосування offsets з компенсацією offsetY
           if (isWallTile) {
             // Розраховуємо розміри ромба на основі gridSize та scale
             const isoWidth = W * gridW * scaleX;   // Ширина ромба в пікселях
             const isoHeight = H * gridH * scaleY;  // Висота ромба в пікселях
             
-            // Ромбоподібна hit area (основа стіни)
-            // Вершини ромба відносно origin (0.5, 1) - низ по центру
-            // Для ізометричного ромба: верх, право, низ, ліво
+            // ⚠️ КЛЮЧОВЕ ВИПРАВЛЕННЯ: Компенсуємо offsetY в vertices
+            // Оскільки origin (0.5, 1) внизу, а offset.y зсуває спрайт вниз,
+            // нам потрібно зсунути hit area ВГОРУ на offsetY для синхронізації
             const wallBase = new Phaser.Geom.Polygon([
-              0, -isoHeight,                       // верх (центр, вище origin)
-              isoWidth / 2, -isoHeight / 2,       // право
-              0, 0,                                // низ (центр, на рівні origin)
-              -isoWidth / 2, -isoHeight / 2        // ліво
+              0, -isoHeight - offsetY,                    // верх (з компенсацією)
+              isoWidth / 2, -isoHeight / 2 - offsetY,    // право
+              0, -offsetY,                                // низ (з компенсацією)
+              -isoWidth / 2, -isoHeight / 2 - offsetY     // ліво
             ]);
             
             spr.setInteractive(wallBase, Phaser.Geom.Polygon.Contains);
@@ -267,8 +271,12 @@ export class TileRenderer {
             console.log(
               `${prefix} [HIT AREA] ${tileId} at (${x},${y}): Ромбоподібна колізія ` +
               `${isoWidth.toFixed(0)}×${isoHeight.toFixed(0)} (grid=${gridW}×${gridH}, scale=${scaleX.toFixed(2)}) ` +
-              `at sprite position (${spr.x.toFixed(1)}, ${spr.y.toFixed(1)})`
+              `at sprite position (${spr.x.toFixed(1)}, ${spr.y.toFixed(1)}), ` +
+              `offset=(${offsetX},${offsetY}), vertices compensated by -${offsetY}px`
             );
+            
+            // 🐛 DEBUG: Візуалізація hit area (розкоментуй для перевірки)
+            // this.scene.input.enableDebug(spr, 0x00ff00);
           }
         } else if (isDirtTile) {
           // ✅ DIRT тайли: автоматичний scale під розмір тайла (82x42)
