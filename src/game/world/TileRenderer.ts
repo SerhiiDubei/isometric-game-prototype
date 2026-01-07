@@ -248,31 +248,49 @@ export class TileRenderer {
           }
           
           // ✅ Ромбоподібна hit area для стін (ізометрична основа)
-          // Створюється ПІСЛЯ застосування offsets з компенсацією offsetY
+          // Створюється ПІСЛЯ застосування offsets (Phaser автоматично обробляє зміщення спрайта)
           if (isWallTile) {
-            // Розраховуємо розміри ромба на основі gridSize та scale
-            const isoWidth = W * gridW * scaleX;   // Ширина ромба в пікселях
-            const isoHeight = H * gridH * scaleY;  // Висота ромба в пікселях
+            // ✅ КЛЮЧОВЕ ВИПРАВЛЕННЯ: Використовуємо GRID-розміри (БЕЗ scale!)
+            // Hit area базується на footprint в grid, не на візуальному розмірі спрайта
+            const gridHitWidth = W * gridW;   // 82 * 2 = 164 для 2×1
+            const gridHitHeight = H * gridH;  // 42 * 1 = 42 для 2×1
             
-            // ⚠️ КЛЮЧОВЕ ВИПРАВЛЕННЯ: Компенсуємо offsetY в vertices
-            // Оскільки origin (0.5, 1) внизу, а offset.y зсуває спрайт вниз,
-            // нам потрібно зсунути hit area ВГОРУ на offsetY для синхронізації
+            // ✅ Vertices відносно origin (0.5, 1) - низ по центру
+            // Origin (0.5, 1) означає: center-bottom sprite
+            // Тому (0, 0) = низ спрайта, (0, -height) = верх спрайта
+            // Phaser автоматично обробляє зміщення спрайта через spr.x/spr.y
             const wallBase = new Phaser.Geom.Polygon([
-              0, -isoHeight - offsetY,                    // верх (з компенсацією)
-              isoWidth / 2, -isoHeight / 2 - offsetY,    // право
-              0, -offsetY,                                // низ (з компенсацією)
-              -isoWidth / 2, -isoHeight / 2 - offsetY     // ліво
+              0, -gridHitHeight,                    // Верх (центр вгорі)
+              gridHitWidth / 2, -gridHitHeight / 2, // Право
+              0, 0,                                  // Низ (origin, центр внизу)
+              -gridHitWidth / 2, -gridHitHeight / 2 // Ліво
             ]);
             
             spr.setInteractive(wallBase, Phaser.Geom.Polygon.Contains);
             
             const isCorner = tileConfig?.id?.includes('corner') || false;
             const prefix = isCorner ? '🏛️' : '🧱';
+            
+            // ✅ ДЕТАЛЬНЕ ЛОГУВАННЯ
+            const visualWidth = spr.texture ? spr.texture.source[0].width * scaleX : 0;
+            const visualHeight = spr.texture ? spr.texture.source[0].height * scaleY : 0;
+            
             console.log(
-              `${prefix} [HIT AREA] ${tileId} at (${x},${y}): Ромбоподібна колізія ` +
-              `${isoWidth.toFixed(0)}×${isoHeight.toFixed(0)} (grid=${gridW}×${gridH}, scale=${scaleX.toFixed(2)}) ` +
-              `at sprite position (${spr.x.toFixed(1)}, ${spr.y.toFixed(1)}), ` +
-              `offset=(${offsetX},${offsetY}), vertices compensated by -${offsetY}px`
+              `${prefix} [COLLISION DEBUG] ${tileId} at grid(${x},${y}):
+     • Sprite screen pos: (${spr.x.toFixed(1)}, ${spr.y.toFixed(1)})
+     • Origin: (${spr.originX.toFixed(2)}, ${spr.originY.toFixed(2)})
+     • Offset applied: (${offsetX}, ${offsetY})
+     • Grid footprint: ${gridW}×${gridH} cells
+     • Grid hit size: ${gridHitWidth}×${gridHitHeight}px (W=${W}, H=${H})
+     • Visual scale: (${scaleX.toFixed(2)}, ${scaleY.toFixed(2)})
+     • Visual size: ${visualWidth.toFixed(0)}×${visualHeight.toFixed(0)}px
+     • Hit bounds: top=${-gridHitHeight}, bottom=0, left=${-gridHitWidth/2}, right=${gridHitWidth/2}
+     • Hit vertices: [
+       (0, ${-gridHitHeight}),
+       (${gridHitWidth/2}, ${-gridHitHeight/2}),
+       (0, 0),
+       (${-gridHitWidth/2}, ${-gridHitHeight/2})
+     ]`
             );
             
             // 🐛 DEBUG: Візуалізація hit area (розкоментуй для перевірки)
