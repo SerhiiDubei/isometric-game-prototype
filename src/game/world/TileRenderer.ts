@@ -172,26 +172,15 @@ export class TileRenderer {
         const scaleX = typeof scale === "number" ? scale : scale.x;
         const scaleY = typeof scale === "number" ? scale : scale.y;
 
-        // ✅ Grid-center depth: використовуємо x+0.5, y+0.5 для всіх тайлів незалежно від gridSize
-        // Це забезпечує консистентну точку відліку глибини (top-left + 0.5) для всіх тайлів
-        const effectiveX = x + 0.5;
-        const effectiveY = y + 0.5;
-        const centerPoint: GridPoint = { x: effectiveX, y: effectiveY };
-        let { x: sx, y: sy } = this.iso.cellToScreen(centerPoint);
+        // ✅ 1️⃣ Positioning: використовуємо TOP-LEFT кут grid-області для позиціонування спрайту
+        // Це забезпечує правильне вирівнювання спрайту з grid-клітинками
+        const topLeftPoint: GridPoint = { x, y };
+        const { x: sx, y: sy } = this.iso.cellToScreen(topLeftPoint);
         
-        // ✅ Якщо це South-стіна, зсуваємо її вниз на 1 клітинку (42px)
-        if (tileId.includes('_s') || tileId.includes('corner_s')) {
-          // ✅ ФІКСОВАНИЙ offset: 1 клітинка (42px)
-          // Це зміщує South-стіну вниз на висоту однієї клітинки,
-          // щоб вона візуально знаходилася в нижній частині grid 2×2
-          const SOUTH_OFFSET = H; // 42px = 1 клітинка
-          sx -= SOUTH_OFFSET; // вліво
-          sy += SOUTH_OFFSET; // вниз
-          
-          console.log(
-            `🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): offset=${SOUTH_OFFSET}px (1 cell)`
-          );
-        }
+        // ✅ 2️⃣ Depth: використовуємо CENTER (x+0.5, y+0.5) для Z-ordering
+        // Це забезпечує консистентну точку відліку глибини для всіх тайлів
+        const depthCenterX = x + 0.5;
+        const depthCenterY = y + 0.5;
 
         // ✅ Визначаємо origin в залежності від типу тайла
         const originX = 0.5;
@@ -327,12 +316,12 @@ export class TileRenderer {
         }
 
         // ✅ Корекція depth для стін (ізометрична глибина)
-        // Використовуємо effectiveX, effectiveY (x+0.5, y+0.5) для консистентної глибини
+        // Використовуємо depthCenterX, depthCenterY (x+0.5, y+0.5) для консистентної глибини
         if (isWallTile) {
           // Depth = сума координат (чим більше — тим ближче до камери)
           // Множимо на 100 для точності та додаємо offset для шару
           const layerDepth = layerType === 'object' ? 10 : 0; // object layer має depth 10
-          const baseDepth = (effectiveX + effectiveY) * 100;
+          const baseDepth = (depthCenterX + depthCenterY) * 100;
           
           // ✅ Depth offset на основі орієнтації стіни (для правильного порядку перекриття)
           // Перевіряємо кути СПОЧАТКУ, щоб уникнути конфліктів підрядків
@@ -360,20 +349,21 @@ export class TileRenderer {
             depthOffset = 0; // North/west walls (front)
           }
           
-          // Height offset: тільки з конфігу, БЕЗ дефолтних значень
-          const heightOffset = tileConfig?.offset?.y ?? 0; // Використовуємо nullish coalescing для 0 за замовчуванням
+          // ✅ WALL_HEIGHT_OFFSET: константа для depth layering (Z-order відносно підлоги)
+          // Це НЕ те саме, що config.offset.y (візуальне позиціонування)
+          const WALL_HEIGHT_OFFSET = 5; // Невелика константа, щоб стіни малювалися трохи вище за землю
           
           // Фінальна глибина
-          const finalDepth = baseDepth + layerDepth + depthOffset + heightOffset;
+          const finalDepth = baseDepth + layerDepth + depthOffset + WALL_HEIGHT_OFFSET;
           spr.setDepth(finalDepth);
           
           const isCorner = tileConfig?.id?.includes('corner') || false;
           const prefix = isCorner ? '🏛️' : '🧱';
           console.log(
-            `${prefix} [DEPTH CALC] ${tileId} at (${x},${y}): ` +
-            `effective=(${effectiveX.toFixed(1)},${effectiveY.toFixed(1)}), ` +
+            `${prefix} [DEPTH CALC] ${tileId} at grid(${x},${y}): ` +
+            `depthCenter=(${depthCenterX.toFixed(1)},${depthCenterY.toFixed(1)}), ` +
             `base=${baseDepth}, layer=${layerDepth}, ` +
-            `depthOffset=${depthOffset}, heightOffset=${heightOffset}, ` +
+            `depthOffset=${depthOffset}, wallHeight=${WALL_HEIGHT_OFFSET}, ` +
             `final=${finalDepth}`
           );
         }
