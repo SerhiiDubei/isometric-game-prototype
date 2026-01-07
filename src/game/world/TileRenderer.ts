@@ -172,10 +172,11 @@ export class TileRenderer {
         const scaleX = typeof scale === "number" ? scale : scale.x;
         const scaleY = typeof scale === "number" ? scale : scale.y;
 
-        // ✅ Обчислюємо центр області тайла
-        const centerX = x + (gridW - 1) / 2;
-        const centerY = y + (gridH - 1) / 2;
-        const centerPoint: GridPoint = { x: centerX, y: centerY };
+        // ✅ Grid-center depth: використовуємо x+0.5, y+0.5 для всіх тайлів незалежно від gridSize
+        // Це забезпечує консистентну точку відліку глибини (top-left + 0.5) для всіх тайлів
+        const effectiveX = x + 0.5;
+        const effectiveY = y + 0.5;
+        const centerPoint: GridPoint = { x: effectiveX, y: effectiveY };
         let { x: sx, y: sy } = this.iso.cellToScreen(centerPoint);
         
         // ✅ Якщо це South-стіна, зсуваємо її вниз на 1 клітинку (42px)
@@ -247,7 +248,14 @@ export class TileRenderer {
 
           spr.setScale(scaleX, scaleY);
           
+          // ✅ Застосовуємо offset з конфігу ПЕРЕД створенням hit area (для синхронізації)
+          if (tileConfig?.offset) {
+            spr.x += tileConfig.offset.x;
+            spr.y += tileConfig.offset.y;
+          }
+          
           // ✅ Ромбоподібна hit area для стін (ізометрична основа)
+          // Створюється ПІСЛЯ застосування всіх offsets, щоб бути синхронізованою з позицією спрайту
           if (isWallTile) {
             // Розраховуємо розміри ромба на основі gridSize та scale
             const isoWidth = W * gridW * scaleX;   // Ширина ромба в пікселях
@@ -268,8 +276,9 @@ export class TileRenderer {
             const isCorner = tileConfig?.id?.includes('corner') || false;
             const prefix = isCorner ? '🏛️' : '🧱';
             console.log(
-              `${prefix} [HIT AREA] ${tileId}: Ромбоподібна колізія ` +
-              `${isoWidth.toFixed(0)}×${isoHeight.toFixed(0)} (grid=${gridW}×${gridH}, scale=${scaleX.toFixed(2)})`
+              `${prefix} [HIT AREA] ${tileId} at (${x},${y}): Ромбоподібна колізія ` +
+              `${isoWidth.toFixed(0)}×${isoHeight.toFixed(0)} (grid=${gridW}×${gridH}, scale=${scaleX.toFixed(2)}) ` +
+              `at sprite position (${spr.x.toFixed(1)}, ${spr.y.toFixed(1)})`
             );
           }
         } else if (isDirtTile) {
@@ -287,6 +296,12 @@ export class TileRenderer {
           
           spr.setScale(finalScale * scaleX, finalScale * scaleY);
           
+          // ✅ Застосовуємо offset якщо є
+          if (tileConfig?.offset) {
+            spr.x += tileConfig.offset.x;
+            spr.y += tileConfig.offset.y;
+          }
+          
           // ✅ Лог тільки для першого тайла (щоб не спамити консоль)
           // console.log(`🟤 DIRT scale: ${originalWidth}x${originalHeight} → scale=${finalScale.toFixed(2)} → ${(originalWidth * finalScale).toFixed(0)}x${(originalHeight * finalScale).toFixed(0)}`);
         } else {
@@ -294,12 +309,12 @@ export class TileRenderer {
           const displayWidth = W * gridW * scaleX;
           const displayHeight = H * gridH * scaleY;
           spr.setDisplaySize(displayWidth, displayHeight);
-        }
-
-        // ✅ Застосовуємо offset якщо є
-        if (tileConfig?.offset) {
-          spr.x += tileConfig.offset.x;
-          spr.y += tileConfig.offset.y;
+          
+          // ✅ Застосовуємо offset якщо є
+          if (tileConfig?.offset) {
+            spr.x += tileConfig.offset.x;
+            spr.y += tileConfig.offset.y;
+          }
         }
 
         // ✅ Вимкнемо фільтри та ефекти, які можуть додавати контур
@@ -312,45 +327,54 @@ export class TileRenderer {
         }
 
         // ✅ Корекція depth для стін (ізометрична глибина)
-        // Для стін 2×2 використовуємо центр grid для правильного порядку малювання
+        // Використовуємо effectiveX, effectiveY (x+0.5, y+0.5) для консистентної глибини
         if (isWallTile) {
-          // Використовуємо центр grid для depth (більш точний для стін 2×2)
-          const centerX = x + (gridW - 1) / 2;
-          const centerY = y + (gridH - 1) / 2;
-          
           // Depth = сума координат (чим більше — тим ближче до камери)
           // Множимо на 100 для точності та додаємо offset для шару
           const layerDepth = layerType === 'object' ? 10 : 0; // object layer має depth 10
-          const baseDepth = (centerX + centerY) * 100;
+          const baseDepth = (effectiveX + effectiveY) * 100;
           
-          // Додати невеликий offset для висоти стіни (щоб стіни малювалися над землею)
-          const heightOffset = 5; // стіни трохи вище за землю
-          
-          // ✅ Визначаємо offset залежно від напрямку стіни (ізометрія)
-          // В ізометричній проєкції (камера зверху-ліворуч):
-          // - East (E): вправо-вниз → ближче до камери → offset=100
-          // - South (S): вліво-вниз → найближче до камери → offset=300
-          // - North/West: базова глибина → offset=0
+          // ✅ Depth offset на основі орієнтації стіни (для правильного порядку перекриття)
+          // Перевіряємо кути СПОЧАТКУ, щоб уникнути конфліктів підрядків
           let depthOffset = 0;
           
-          if (tileId.includes('_e') || tileId.includes('corner_e')) {
-            depthOffset = 100; // East: ближче до камери (вправо-вниз)
-          } else if (tileId.includes('_s') || tileId.includes('corner_s')) {
-            depthOffset = 300; // South: НАБАГАТО ближче до камери (вліво-вниз)
-          } else if (tileId.includes('_n') || tileId.includes('_w') || 
-                     tileId.includes('corner_n') || tileId.includes('corner_w')) {
-            depthOffset = 0; // North/West: базова глибина
+          if (tileId.includes('corner_se')) {
+            depthOffset = 400; // South-east corner (south + east)
+          } else if (tileId.includes('corner_sw')) {
+            depthOffset = 350; // South-west corner (south + west)
+          } else if (tileId.includes('corner_ne')) {
+            depthOffset = 150; // North-east corner (north + east)
+          } else if (tileId.includes('corner_nw')) {
+            depthOffset = 50; // North-west corner (north + west)
+          } else if (tileId.includes('corner_s')) {
+            depthOffset = 300; // Generic south corner
+          } else if (tileId.includes('corner_e')) {
+            depthOffset = 100; // Generic east corner
+          } else if (tileId.includes('corner_n') || tileId.includes('corner_w')) {
+            depthOffset = 0; // North/west corners (front)
+          } else if (tileId.includes('_s')) {
+            depthOffset = 300; // South wall (back)
+          } else if (tileId.includes('_e')) {
+            depthOffset = 100; // East wall (right)
+          } else if (tileId.includes('_n') || tileId.includes('_w')) {
+            depthOffset = 0; // North/west walls (front)
           }
           
-          const finalDepth = baseDepth + layerDepth + heightOffset + depthOffset;
+          // Height offset: тільки з конфігу, БЕЗ дефолтних значень
+          const heightOffset = tileConfig?.offset?.y ?? 0; // Використовуємо nullish coalescing для 0 за замовчуванням
+          
+          // Фінальна глибина
+          const finalDepth = baseDepth + layerDepth + depthOffset + heightOffset;
           spr.setDepth(finalDepth);
           
           const isCorner = tileConfig?.id?.includes('corner') || false;
           const prefix = isCorner ? '🏛️' : '🧱';
           console.log(
-            `${prefix} [DEPTH FIX] ${tileId} at (${x},${y}), ` +
-            `grid=${gridW}×${gridH}, center=(${centerX.toFixed(1)},${centerY.toFixed(1)}), ` +
-            `depth=${finalDepth} (offset=${depthOffset})`
+            `${prefix} [DEPTH CALC] ${tileId} at (${x},${y}): ` +
+            `effective=(${effectiveX.toFixed(1)},${effectiveY.toFixed(1)}), ` +
+            `base=${baseDepth}, layer=${layerDepth}, ` +
+            `depthOffset=${depthOffset}, heightOffset=${heightOffset}, ` +
+            `final=${finalDepth}`
           );
         }
 
