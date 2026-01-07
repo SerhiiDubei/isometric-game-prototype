@@ -59,7 +59,12 @@ function wallBaseOffset(gridWidth: number, gridHeight: number) {
 }
 
 // ✅ Спільні параметри для всіх 2×2 стін та кутів
-const TWO_BY_TWO_WALL_SCALE = wallBaseScale(2, 2);   // ≈ { x: 0.64, y: 0.64 }
+const TWO_BY_TWO_WALL_SCALE_BASE = wallBaseScale(2, 2);   // ≈ { x: 0.64, y: 0.64 }
+// ✅ Збільшуємо всі стіни в 2 рази
+const TWO_BY_TWO_WALL_SCALE = { 
+  x: TWO_BY_TWO_WALL_SCALE_BASE.x * 2,  // ≈ 1.28
+  y: TWO_BY_TWO_WALL_SCALE_BASE.y * 2   // ≈ 1.28
+};
 const TWO_BY_TWO_WALL_OFFSET = wallBaseOffset(2, 2); // { x: 0, y: 42 }
 
 export const TILE_CONFIGS: TileConfig[] = [
