@@ -151,21 +151,7 @@ export class TileRenderer {
         const gridW = gridSize.width;
         const gridH = gridSize.height;
 
-        // ✅ Обчислюємо центр області тайла
-        const centerX = x + (gridW - 1) / 2;
-        const centerY = y + (gridH - 1) / 2;
-        const centerPoint: GridPoint = { x: centerX, y: centerY };
-        let { x: sx, y: sy } = this.iso.cellToScreen(centerPoint);
-        
-        // ✅ Якщо це South-стіна, зсуваємо її вниз на 1 клітинку (42px)
-        if (tileId.includes('_s') || tileId.includes('corner_s')) {
-          const SOUTH_OFFSET = 42; // фіксована константа (1 клітинка)
-          sx -= SOUTH_OFFSET; // вліво
-          sy += SOUTH_OFFSET; // вниз
-          console.log(`🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): shifted by (-${SOUTH_OFFSET}, +${SOUTH_OFFSET})`);
-        }
-
-        // ✅ Перевіряємо, чи існує текстура
+        // ✅ Перевіряємо, чи існує текстура (потрібно для обчислення offset)
         if (!this.scene.textures.exists(key)) {
           const isCorner = tileConfig?.id?.includes('corner') || false;
           const prefix = isCorner ? '❌ [CORNER MISSING]' : '⚠️';
@@ -179,6 +165,49 @@ export class TileRenderer {
             continue; // Пропускаємо, якщо немає fallback
           }
           key = fallbackKey;
+        }
+
+        // ✅ Обчислюємо scale раніше (потрібно для динамічного offset)
+        const scale = tileConfig?.scale ?? 1;
+        const scaleX = typeof scale === "number" ? scale : scale.x;
+        const scaleY = typeof scale === "number" ? scale : scale.y;
+
+        // ✅ Обчислюємо центр області тайла
+        const centerX = x + (gridW - 1) / 2;
+        const centerY = y + (gridH - 1) / 2;
+        const centerPoint: GridPoint = { x: centerX, y: centerY };
+        let { x: sx, y: sy } = this.iso.cellToScreen(centerPoint);
+        
+        // ✅ Якщо це South-стіна, зсуваємо її вниз на основі візуальної висоти sprite
+        if (tileId.includes('_s') || tileId.includes('corner_s')) {
+          // ✅ Динамічний offset на основі візуальної висоти sprite
+          const texture = this.scene.textures.exists(key) 
+            ? this.scene.textures.get(key) 
+            : null;
+          
+          if (texture && texture.source[0]) {
+            const spriteHeight = texture.source[0].height * scaleY;
+            const cellsOccupied = Math.ceil(spriteHeight / H);
+            
+            // Зміщуємо на половину різниці між візуальною та grid-висотою + базовий offset
+            const visualExtraHeight = (cellsOccupied - gridH) * H * 0.5;
+            const SOUTH_OFFSET = H + visualExtraHeight; // Базовий offset (1 клітинка) + екстра
+            
+            sx -= SOUTH_OFFSET; // вліво
+            sy += SOUTH_OFFSET; // вниз
+            
+            console.log(
+              `🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): ` +
+              `spriteH=${spriteHeight.toFixed(0)}px, cells=${cellsOccupied}, ` +
+              `gridH=${gridH}, offset=${SOUTH_OFFSET.toFixed(0)}px`
+            );
+          } else {
+            // Fallback до фіксованого offset (2 клітинки)
+            const SOUTH_OFFSET = H * 2; // 84px
+            sx -= SOUTH_OFFSET;
+            sy += SOUTH_OFFSET;
+            console.log(`🔧 [SOUTH OFFSET] ${tileId} at (${x},${y}): fallback offset=${SOUTH_OFFSET}px`);
+          }
         }
 
         // ✅ Визначаємо origin в залежності від типу тайла
@@ -206,10 +235,7 @@ export class TileRenderer {
         
         const spr = this.scene.add.image(sx, sy, key).setOrigin(originX, originY);
         
-        // ✅ Застосовуємо масштабування з конфігурації
-        const scale = tileConfig?.scale ?? 1;
-        const scaleX = typeof scale === "number" ? scale : scale.x;
-        const scaleY = typeof scale === "number" ? scale : scale.y;
+        // ✅ Scale вже обчислено вище для динамічного offset
 
         // ✅ Різна логіка для різних типів тайлів
         if (layerType === 'object') {
